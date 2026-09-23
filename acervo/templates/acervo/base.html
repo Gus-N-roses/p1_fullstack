@@ -1,0 +1,33 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Biblioteca{% endblock %} · Acervo</title>
+  <link rel="stylesheet" href="{% static 'acervo/estilo.css' %}">
+</head>
+<body>
+  <header class="topo">
+    <a class="marca" href="{% url 'inicio' %}">📚 Biblioteca</a>
+    <nav>
+      <a href="{% url 'inicio' %}">Início</a>
+      <a href="{% url 'admin:index' %}">Admin</a>
+    </nav>
+  </header>
+
+  <main class="conteudo">
+    {% if messages %}
+      <ul class="mensagens">
+        {% for mensagem in messages %}
+          <li class="mensagem {{ mensagem.tags }}">{{ mensagem }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% block conteudo %}{% endblock %}
+  </main>
+
+  <footer class="rodape">© 2026 · Laboratório de Programação Full Stack</footer>
+</body>
+</html>
