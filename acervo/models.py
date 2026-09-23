@@ -42,9 +42,7 @@ class Livro(models.Model):
 
     def exemplares_disponiveis(self):
         """Exemplares ativos e sem empréstimo em aberto."""
-        return self.exemplares.filter(ativo=True).exclude(
-            emprestimos__data_devolucao__isnull=True,
-        )
+        return Exemplar.objects.disponiveis().filter(livro=self)
 
     def reservas_ativas(self):
         """A fila de reserva: aguardando + separadas para retirada, por ordem de chegada."""
@@ -58,6 +56,17 @@ class Livro(models.Model):
         return max(self.exemplares_disponiveis().count() - separados, 0)
 
 
+class ExemplarQuerySet(models.QuerySet):
+    def disponiveis(self):
+        """Ativos e sem empréstimo em aberto.
+
+        Usa subconsulta: um exclude() direto pela relação reversa também
+        descartaria exemplares que nunca foram emprestados (LEFT JOIN com NULL).
+        """
+        em_aberto = Emprestimo.objects.filter(data_devolucao__isnull=True).values('exemplar')
+        return self.filter(ativo=True).exclude(pk__in=em_aberto)
+
+
 class Exemplar(models.Model):
     livro = models.ForeignKey(Livro, on_delete=models.CASCADE, related_name='exemplares')
     codigo = models.CharField('código de tombo', max_length=30, unique=True)
@@ -66,6 +75,8 @@ class Exemplar(models.Model):
         'em circulação', default=True,
         help_text='Desmarque para exemplares perdidos, danificados ou em manutenção.',
     )
+
+    objects = ExemplarQuerySet.as_manager()
 
     class Meta:
         ordering = ['livro__titulo', 'codigo']

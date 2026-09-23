@@ -56,9 +56,7 @@ class MembroForm(forms.ModelForm):
 class EmprestimoForm(forms.Form):
     membro = forms.ModelChoiceField(queryset=Membro.objects.filter(ativo=True))
     exemplar = forms.ModelChoiceField(
-        queryset=Exemplar.objects.filter(ativo=True)
-        .exclude(emprestimos__data_devolucao__isnull=True)
-        .select_related('livro'),
+        queryset=Exemplar.objects.disponiveis().select_related('livro'),
         help_text='Somente exemplares disponíveis aparecem na lista.',
     )
     data_prevista_devolucao = forms.DateField(
