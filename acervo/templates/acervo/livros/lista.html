@@ -10,8 +10,13 @@
 
 <form method="get" class="busca">
   <input type="search" name="q" value="{{ busca }}" placeholder="Buscar por título, autor ou ISBN">
+  <select name="status">
+    <option value="">Todos os status</option>
+    <option value="disponivel" {% if status == 'disponivel' %}selected{% endif %}>Disponível</option>
+    <option value="emprestado" {% if status == 'emprestado' %}selected{% endif %}>Emprestado</option>
+  </select>
   <button type="submit">Buscar</button>
-  {% if busca %}<a class="botao secundario" href="{% url 'lista_livros' %}">Limpar</a>{% endif %}
+  {% if busca or status %}<a class="botao secundario" href="{% url 'lista_livros' %}">Limpar</a>{% endif %}
 </form>
 
 <table>
@@ -29,7 +34,9 @@
         </td>
       </tr>
     {% empty %}
-      <tr><td colspan="5" class="vazio">Nenhum livro encontrado.</td></tr>
+      <tr><td colspan="5" class="vazio">
+        {% if busca or status %}Nenhum livro encontrado com esses filtros.{% else %}Nenhum livro cadastrado ainda.{% endif %}
+      </td></tr>
     {% endfor %}
   </tbody>
 </table>

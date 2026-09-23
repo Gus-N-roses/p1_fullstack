@@ -85,14 +85,39 @@ def excluir_autor(request, pk):
 # Livros
 # ---------------------------------------------------------------------------
 
+def _quantidade_disponivel(livro):
+    """Conta exemplares disponíveis a partir do cache do prefetch_related (sem N+1).
+
+    A regra "disponível" já existe no model (Livro.quantidade_livre()), mas chamá-la
+    aqui dentro de um loop dispararia uma query nova por livro, desperdiçando o
+    prefetch_related('exemplares__emprestimos') que a view já faz.
+    """
+    return sum(
+        1 for exemplar in livro.exemplares.all()
+        if exemplar.ativo and not any(
+            emprestimo.data_devolucao is None for emprestimo in exemplar.emprestimos.all()
+        )
+    )
+
+
 def lista_livros(request):
     busca = request.GET.get('q', '').strip()
+    status = request.GET.get('status', '').strip()
+
     livros = Livro.objects.prefetch_related('autores', 'exemplares__emprestimos')
     if busca:
         livros = livros.filter(
             Q(titulo__icontains=busca) | Q(autores__nome__icontains=busca) | Q(isbn__icontains=busca)
         ).distinct()
-    return render(request, 'acervo/livros/lista.html', {'livros': livros, 'busca': busca})
+
+    if status == 'disponivel':
+        livros = [livro for livro in livros if _quantidade_disponivel(livro) > 0]
+    elif status == 'emprestado':
+        livros = [livro for livro in livros if livro.exemplares.all() and _quantidade_disponivel(livro) == 0]
+
+    return render(request, 'acervo/livros/lista.html', {
+        'livros': livros, 'busca': busca, 'status': status,
+    })
 
 
 def livro_detalhe(request, pk):

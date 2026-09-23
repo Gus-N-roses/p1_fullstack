@@ -178,3 +178,47 @@ class TelasTeste(BaseTeste):
             'ano_publicacao': 1881,
         })
         self.assertTrue(Livro.objects.filter(isbn='9788535910664').exists())
+
+
+class BuscaEFiltroLivrosTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        # self.livro/self.exemplar (Dom Casmurro) ficam disponíveis.
+        # Criamos um segundo livro e o deixamos totalmente emprestado.
+        self.autor = Autor.objects.get()
+        self.livro_emprestado = Livro.objects.create(
+            titulo='Memórias Póstumas de Brás Cubas', isbn='9788535910664', ano_publicacao=1881,
+        )
+        self.livro_emprestado.autores.add(self.autor)
+        exemplar_emprestado = Exemplar.objects.create(livro=self.livro_emprestado, codigo='MP-001')
+        regras.realizar_emprestimo(self.ana, exemplar_emprestado)
+
+    def test_busca_por_titulo_filtra_lista(self):
+        resposta = self.client.get(reverse('lista_livros'), {'q': 'casmurro'})
+        self.assertContains(resposta, self.livro.titulo)
+        self.assertNotContains(resposta, self.livro_emprestado.titulo)
+
+    def test_busca_por_autor_filtra_lista(self):
+        resposta = self.client.get(reverse('lista_livros'), {'q': 'Machado de Assis'})
+        self.assertContains(resposta, self.livro.titulo)
+        self.assertContains(resposta, self.livro_emprestado.titulo)
+
+    def test_busca_sem_resultado_mostra_mensagem(self):
+        resposta = self.client.get(reverse('lista_livros'), {'q': 'livro que não existe'})
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'Nenhum livro encontrado com esses filtros.')
+
+    def test_filtro_status_disponivel(self):
+        resposta = self.client.get(reverse('lista_livros'), {'status': 'disponivel'})
+        self.assertContains(resposta, self.livro.titulo)
+        self.assertNotContains(resposta, self.livro_emprestado.titulo)
+
+    def test_filtro_status_emprestado(self):
+        resposta = self.client.get(reverse('lista_livros'), {'status': 'emprestado'})
+        self.assertContains(resposta, self.livro_emprestado.titulo)
+        self.assertNotContains(resposta, self.livro.titulo)
+
+    def test_busca_e_filtro_combinados(self):
+        resposta = self.client.get(reverse('lista_livros'), {'q': 'machado', 'status': 'disponivel'})
+        self.assertContains(resposta, self.livro.titulo)
+        self.assertNotContains(resposta, self.livro_emprestado.titulo)
