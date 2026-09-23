@@ -20,18 +20,25 @@
   {% if livro.sinopse %}<dt>Sinopse</dt><dd>{{ livro.sinopse|linebreaksbr }}</dd>{% endif %}
 </dl>
 
-<h2>Exemplares</h2>
+<div class="cabecalho-pagina">
+  <h2>Exemplares</h2>
+  <a class="botao" href="{% url 'novo_exemplar' %}?livro={{ livro.pk }}">+ Novo exemplar</a>
+</div>
 <table>
-  <thead><tr><th>Código</th><th>Aquisição</th><th>Situação</th></tr></thead>
+  <thead><tr><th>Código</th><th>Aquisição</th><th>Situação</th><th></th></tr></thead>
   <tbody>
     {% for exemplar in exemplares %}
       <tr>
         <td>{{ exemplar.codigo }}</td>
         <td>{{ exemplar.data_aquisicao|date:"d/m/Y" }}</td>
         <td><span class="etiqueta {{ exemplar.situacao }}">{{ exemplar.situacao }}</span></td>
+        <td class="acoes">
+          <a href="{% url 'editar_exemplar' exemplar.pk %}">Editar</a>
+          <a href="{% url 'excluir_exemplar' exemplar.pk %}">Excluir</a>
+        </td>
       </tr>
     {% empty %}
-      <tr><td colspan="3" class="vazio">Nenhum exemplar cadastrado.</td></tr>
+      <tr><td colspan="4" class="vazio">Nenhum exemplar cadastrado.</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -43,7 +50,7 @@
     {% for reserva in fila %}
       <tr>
         <td>{{ forloop.counter }}º</td>
-        <td>{{ reserva.membro }}</td>
+        <td><a href="{{ reserva.membro.get_absolute_url }}">{{ reserva.membro }}</a></td>
         <td>{{ reserva.data_reserva|date:"d/m/Y H:i" }}</td>
         <td>
           <span class="etiqueta {{ reserva.status }}">{{ reserva.get_status_display }}</span>

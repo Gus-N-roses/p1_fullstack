@@ -15,4 +15,15 @@ urlpatterns = [
     path('livros/<int:pk>/', views.livro_detalhe, name='livro_detalhe'),
     path('livros/<int:pk>/editar/', views.editar_livro, name='editar_livro'),
     path('livros/<int:pk>/excluir/', views.excluir_livro, name='excluir_livro'),
+
+    path('exemplares/', views.lista_exemplares, name='lista_exemplares'),
+    path('exemplares/novo/', views.novo_exemplar, name='novo_exemplar'),
+    path('exemplares/<int:pk>/editar/', views.editar_exemplar, name='editar_exemplar'),
+    path('exemplares/<int:pk>/excluir/', views.excluir_exemplar, name='excluir_exemplar'),
+
+    path('membros/', views.lista_membros, name='lista_membros'),
+    path('membros/novo/', views.novo_membro, name='novo_membro'),
+    path('membros/<int:pk>/', views.membro_detalhe, name='membro_detalhe'),
+    path('membros/<int:pk>/editar/', views.editar_membro, name='editar_membro'),
+    path('membros/<int:pk>/excluir/', views.excluir_membro, name='excluir_membro'),
 ]
