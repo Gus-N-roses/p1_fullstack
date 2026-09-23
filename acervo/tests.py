@@ -222,3 +222,47 @@ class BuscaEFiltroLivrosTeste(BaseTeste):
         resposta = self.client.get(reverse('lista_livros'), {'q': 'machado', 'status': 'disponivel'})
         self.assertContains(resposta, self.livro.titulo)
         self.assertNotContains(resposta, self.livro_emprestado.titulo)
+
+    def test_disponibilidade_considera_o_mesmo_exemplar_nas_duas_condicoes(self):
+        """Um livro só conta como 'disponível' se o MESMO exemplar for ativo e estiver livre.
+
+        Regressão para o erro clássico de "spanning multi-valued relationships" do
+        Django: encadear dois .filter()/.exclude() separados sobre `exemplares` deixaria
+        cada condição casar com um exemplar diferente do mesmo livro.
+        """
+        livro_misto = Livro.objects.create(titulo='Livro Misto', isbn='9780000000000', ano_publicacao=2000)
+        livro_misto.autores.add(self.autor)
+        exemplar_emprestado = Exemplar.objects.create(livro=livro_misto, codigo='LM-001', ativo=True)
+        Exemplar.objects.create(livro=livro_misto, codigo='LM-002', ativo=False)  # inativo, nunca emprestado
+        regras.realizar_emprestimo(self.bruno, exemplar_emprestado)
+
+        resposta = self.client.get(reverse('lista_livros'), {'status': 'disponivel'})
+        self.assertNotContains(resposta, 'Livro Misto')
+
+        resposta = self.client.get(reverse('lista_livros'), {'status': 'emprestado'})
+        self.assertContains(resposta, 'Livro Misto')
+
+    def test_disponibilidade_conta_qualquer_exemplar_livre_do_livro(self):
+        """Basta UM exemplar disponível para o livro contar como 'disponível', mesmo que
+        outro exemplar do mesmo livro esteja emprestado.
+
+        Este é o cenário que de fato separa a implementação correta (Q() combinado em
+        uma única consulta) da ingênua (.filter().exclude() encadeados): um .exclude()
+        aplicado depois de um .filter() na mesma relação descarta o livro inteiro se
+        QUALQUER exemplar bater na condição do exclude — mesmo que outro exemplar do
+        mesmo livro devesse tornar o livro disponível. Verificado manualmente no shell
+        antes deste teste: a versão ingênua retorna 0 aqui; a correta retorna 1.
+        """
+        livro_parcial = Livro.objects.create(
+            titulo='Livro Parcialmente Emprestado', isbn='9780000000001', ano_publicacao=2001,
+        )
+        livro_parcial.autores.add(self.autor)
+        Exemplar.objects.create(livro=livro_parcial, codigo='LP-001', ativo=True)  # disponível
+        exemplar_emprestado = Exemplar.objects.create(livro=livro_parcial, codigo='LP-002', ativo=True)
+        regras.realizar_emprestimo(self.bruno, exemplar_emprestado)
+
+        resposta = self.client.get(reverse('lista_livros'), {'status': 'disponivel'})
+        self.assertContains(resposta, 'Livro Parcialmente Emprestado')
+
+        resposta = self.client.get(reverse('lista_livros'), {'status': 'emprestado'})
+        self.assertNotContains(resposta, 'Livro Parcialmente Emprestado')

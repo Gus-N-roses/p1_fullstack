@@ -85,35 +85,36 @@ def excluir_autor(request, pk):
 # Livros
 # ---------------------------------------------------------------------------
 
-def _quantidade_disponivel(livro):
-    """Conta exemplares disponíveis a partir do cache do prefetch_related (sem N+1).
-
-    A regra "disponível" já existe no model (Livro.quantidade_livre()), mas chamá-la
-    aqui dentro de um loop dispararia uma query nova por livro, desperdiçando o
-    prefetch_related('exemplares__emprestimos') que a view já faz.
-    """
-    return sum(
-        1 for exemplar in livro.exemplares.all()
-        if exemplar.ativo and not any(
-            emprestimo.data_devolucao is None for emprestimo in exemplar.emprestimos.all()
-        )
-    )
-
-
 def lista_livros(request):
     busca = request.GET.get('q', '').strip()
     status = request.GET.get('status', '').strip()
 
+    # "Disponível" já tem sua regra correta em ExemplarQuerySet.disponiveis() (ativo e
+    # sem empréstimo em aberto). Reaproveitamos essa subconsulta PRONTA, sem negação
+    # embutida, em vez de reconstruir a condição aqui com Q(A) & ~Q(B) — Django não trata
+    # a negação de um Q() composto sobre uma relação "de muitos" (exemplares) como um
+    # verdadeiro NOT EXISTS: ~Q(A & B) vira "existe algum exemplar em que NOT(A AND B)",
+    # o que é bem diferente de "nenhum exemplar satisfaz (A AND B)" (testado manualmente
+    # no shell: um livro com um exemplar disponível e outro emprestado aparecia nos dois
+    # filtros ao mesmo tempo). Comparando por pk__in contra a subconsulta já resolvida,
+    # tanto o filter() quanto o exclude() em Livro ficam com uma condição simples, sem
+    # negação por dentro, e o Django resolve certo dos dois lados.
+    livro_tem_exemplar_disponivel = Q(exemplares__pk__in=Exemplar.objects.disponiveis().values('pk'))
+
     livros = Livro.objects.prefetch_related('autores', 'exemplares__emprestimos')
     if busca:
+        # As duas partes da busca (texto) e do filtro (status) ficam na MESMA consulta:
+        # o Q() de texto é ANDado ao Q() de disponibilidade dentro do mesmo queryset,
+        # então o banco resolve tudo com uma única instrução SQL.
         livros = livros.filter(
             Q(titulo__icontains=busca) | Q(autores__nome__icontains=busca) | Q(isbn__icontains=busca)
-        ).distinct()
-
+        )
     if status == 'disponivel':
-        livros = [livro for livro in livros if _quantidade_disponivel(livro) > 0]
+        livros = livros.filter(livro_tem_exemplar_disponivel)
     elif status == 'emprestado':
-        livros = [livro for livro in livros if livro.exemplares.all() and _quantidade_disponivel(livro) == 0]
+        livros = livros.exclude(livro_tem_exemplar_disponivel).filter(exemplares__isnull=False)
+
+    livros = livros.distinct()
 
     return render(request, 'acervo/livros/lista.html', {
         'livros': livros, 'busca': busca, 'status': status,
