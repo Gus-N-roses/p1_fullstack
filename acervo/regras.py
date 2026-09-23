@@ -2,11 +2,13 @@
 
 As views chamam estas funções; toda a lógica fica aqui, não nos templates.
 """
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Emprestimo, Exemplar, Membro
+from .models import Emprestimo, Exemplar, Membro, Reserva
 
 
 class RegraNegocioErro(Exception):
@@ -38,12 +40,25 @@ def realizar_emprestimo(membro, exemplar, data_prevista_devolucao=None):
     if not exemplar.esta_disponivel:
         raise RegraNegocioErro(f'O exemplar {exemplar.codigo} não está disponível.')
 
+    livro = exemplar.livro
+    processar_fila(livro)
+    reserva_do_membro = livro.reservas_ativas().filter(membro=membro).first()
+    separada_para_ele = reserva_do_membro and reserva_do_membro.status == Reserva.DISPONIVEL
+    if not separada_para_ele and livro.quantidade_livre() == 0:
+        raise RegraNegocioErro(
+            f'Os exemplares de "{livro}" estão separados para quem está na fila de reserva.'
+        )
+
     emprestimo = Emprestimo(membro=membro, exemplar=exemplar)
     if data_prevista_devolucao:
         if data_prevista_devolucao < timezone.localdate():
             raise RegraNegocioErro('A devolução prevista não pode ser no passado.')
         emprestimo.data_prevista_devolucao = data_prevista_devolucao
     emprestimo.save()
+
+    if reserva_do_membro:
+        reserva_do_membro.status = Reserva.ATENDIDA
+        reserva_do_membro.save(update_fields=['status'])
     return emprestimo
 
 
@@ -61,6 +76,9 @@ def registrar_devolucao(emprestimo, data_devolucao=None):
     emprestimo.multa = emprestimo.calcular_multa()
     emprestimo.multa_paga = emprestimo.multa == 0
     emprestimo.save()
+
+    # O exemplar voltou: passa a vez para o próximo da fila de reserva
+    processar_fila(emprestimo.exemplar.livro)
     return emprestimo
 
 
@@ -72,3 +90,61 @@ def pagar_multa(emprestimo):
     emprestimo.multa_paga = True
     emprestimo.save(update_fields=['multa_paga'])
     return emprestimo
+
+
+# ---------------------------------------------------------------------------
+# Fila de reserva
+# ---------------------------------------------------------------------------
+
+def processar_fila(livro):
+    """Atualiza a fila de um livro.
+
+    1. Reservas separadas cujo prazo de retirada venceu passam a "expirada".
+    2. Cada exemplar livre é separado para o próximo "aguardando" da fila,
+       que ganha PRAZO_RETIRADA_RESERVA_DIAS para retirar.
+    """
+    hoje = timezone.localdate()
+    livro.reservas.filter(
+        status=Reserva.DISPONIVEL, data_limite_retirada__lt=hoje,
+    ).update(status=Reserva.EXPIRADA)
+
+    vagas = livro.quantidade_livre()
+    if vagas == 0:
+        return []
+
+    proximos = list(livro.reservas.filter(status=Reserva.AGUARDANDO).order_by('data_reserva', 'pk')[:vagas])
+    data_limite = hoje + timedelta(days=settings.PRAZO_RETIRADA_RESERVA_DIAS)
+    for reserva in proximos:
+        reserva.status = Reserva.DISPONIVEL
+        reserva.data_limite_retirada = data_limite
+        reserva.save(update_fields=['status', 'data_limite_retirada'])
+    return proximos
+
+
+@transaction.atomic
+def criar_reserva(membro, livro):
+    if not membro.ativo:
+        raise RegraNegocioErro(f'{membro} está inativo e não pode reservar.')
+    if livro.reservas_ativas().filter(membro=membro).exists():
+        raise RegraNegocioErro(f'{membro} já está na fila de "{livro}".')
+    if membro.emprestimos_em_aberto().filter(exemplar__livro=livro).exists():
+        raise RegraNegocioErro(f'{membro} já está com um exemplar de "{livro}".')
+    if not livro.exemplares.filter(ativo=True).exists():
+        raise RegraNegocioErro(f'"{livro}" não tem exemplares em circulação.')
+
+    processar_fila(livro)
+    if livro.quantidade_livre() > 0:
+        raise RegraNegocioErro(
+            f'Há exemplar de "{livro}" disponível agora — faça o empréstimo direto.'
+        )
+    return Reserva.objects.create(membro=membro, livro=livro)
+
+
+@transaction.atomic
+def cancelar_reserva(reserva):
+    if not reserva.ativa:
+        raise RegraNegocioErro('Esta reserva não está mais ativa.')
+    reserva.status = Reserva.CANCELADA
+    reserva.save(update_fields=['status'])
+    processar_fila(reserva.livro)
+    return reserva
