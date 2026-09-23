@@ -119,3 +119,89 @@ class Membro(models.Model):
         return self.emprestimos_em_aberto().filter(
             data_prevista_devolucao__lt=timezone.localdate(),
         ).exists()
+
+
+def data_prevista_padrao():
+    return timezone.localdate() + timedelta(days=settings.PRAZO_EMPRESTIMO_DIAS)
+
+
+class Emprestimo(models.Model):
+    exemplar = models.ForeignKey(Exemplar, on_delete=models.PROTECT, related_name='emprestimos')
+    membro = models.ForeignKey(Membro, on_delete=models.PROTECT, related_name='emprestimos')
+    data_emprestimo = models.DateField('data do empréstimo', default=timezone.localdate)
+    data_prevista_devolucao = models.DateField('devolução prevista', default=data_prevista_padrao)
+    data_devolucao = models.DateField('data da devolução', null=True, blank=True)
+    multa = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0.00'))
+    multa_paga = models.BooleanField('multa paga', default=False)
+
+    class Meta:
+        ordering = ['-data_emprestimo', '-pk']
+        verbose_name = 'empréstimo'
+        constraints = [
+            # Um exemplar não pode ter dois empréstimos em aberto ao mesmo tempo
+            models.UniqueConstraint(
+                fields=['exemplar'],
+                condition=models.Q(data_devolucao__isnull=True),
+                name='um_emprestimo_aberto_por_exemplar',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.exemplar} → {self.membro}'
+
+    @property
+    def em_aberto(self):
+        return self.data_devolucao is None
+
+    def dias_atraso(self, data_referencia=None):
+        """Dias de atraso até a devolução (ou até hoje, se ainda em aberto)."""
+        data_final = self.data_devolucao or data_referencia or timezone.localdate()
+        return max((data_final - self.data_prevista_devolucao).days, 0)
+
+    @property
+    def esta_atrasado(self):
+        return self.dias_atraso() > 0
+
+    def calcular_multa(self, data_referencia=None):
+        return self.dias_atraso(data_referencia) * Decimal(settings.VALOR_MULTA_DIARIA)
+
+    @property
+    def multa_estimada(self):
+        """Multa já registrada (devolvido) ou acumulada até hoje (em aberto)."""
+        return self.calcular_multa() if self.em_aberto else self.multa
+
+
+class Reserva(models.Model):
+    AGUARDANDO = 'aguardando'
+    DISPONIVEL = 'disponivel'
+    ATENDIDA = 'atendida'
+    CANCELADA = 'cancelada'
+    EXPIRADA = 'expirada'
+    STATUS_CHOICES = [
+        (AGUARDANDO, 'Aguardando na fila'),
+        (DISPONIVEL, 'Disponível para retirada'),
+        (ATENDIDA, 'Atendida'),
+        (CANCELADA, 'Cancelada'),
+        (EXPIRADA, 'Expirada'),
+    ]
+
+    livro = models.ForeignKey(Livro, on_delete=models.CASCADE, related_name='reservas')
+    membro = models.ForeignKey(Membro, on_delete=models.CASCADE, related_name='reservas')
+    data_reserva = models.DateTimeField('data da reserva', default=timezone.now)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=AGUARDANDO)
+    data_limite_retirada = models.DateField('retirar até', null=True, blank=True)
+
+    class Meta:
+        ordering = ['data_reserva', 'pk']
+
+    def __str__(self):
+        return f'{self.membro} aguarda "{self.livro}"'
+
+    @property
+    def ativa(self):
+        return self.status in (self.AGUARDANDO, self.DISPONIVEL)
+
+    def posicao_na_fila(self):
+        if not self.ativa:
+            return None
+        return list(self.livro.reservas_ativas().values_list('pk', flat=True)).index(self.pk) + 1
