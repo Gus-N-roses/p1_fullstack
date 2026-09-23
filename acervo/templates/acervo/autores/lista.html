@@ -1,0 +1,30 @@
+{% extends 'acervo/base.html' %}
+
+{% block titulo %}Autores{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <h1>Autores</h1>
+  <a class="botao" href="{% url 'novo_autor' %}">+ Novo autor</a>
+</div>
+
+<table>
+  <thead><tr><th>Nome</th><th>Nacionalidade</th><th>Nascimento</th><th>Livros</th><th></th></tr></thead>
+  <tbody>
+    {% for autor in autores %}
+      <tr>
+        <td>{{ autor.nome }}</td>
+        <td>{{ autor.nacionalidade|default:"—" }}</td>
+        <td>{{ autor.data_nascimento|date:"d/m/Y"|default:"—" }}</td>
+        <td>{{ autor.quantidade_livros }}</td>
+        <td class="acoes">
+          <a href="{% url 'editar_autor' autor.pk %}">Editar</a>
+          <a href="{% url 'excluir_autor' autor.pk %}">Excluir</a>
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="vazio">Nenhum autor cadastrado.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

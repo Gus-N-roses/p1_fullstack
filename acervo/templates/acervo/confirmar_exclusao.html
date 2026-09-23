@@ -1,0 +1,14 @@
+{% extends 'acervo/base.html' %}
+
+{% block titulo %}Excluir{% endblock %}
+
+{% block conteudo %}
+<h1>Excluir registro</h1>
+
+<form method="post" class="formulario">
+  {% csrf_token %}
+  <p>Tem certeza de que deseja excluir <strong>{{ objeto }}</strong>? Essa ação não pode ser desfeita.</p>
+  <button type="submit" class="perigo">Sim, excluir</button>
+  <a class="botao secundario" href="{{ cancelar }}">Cancelar</a>
+</form>
+{% endblock %}

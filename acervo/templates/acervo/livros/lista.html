@@ -1,0 +1,36 @@
+{% extends 'acervo/base.html' %}
+
+{% block titulo %}Livros{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <h1>Acervo</h1>
+  <a class="botao" href="{% url 'novo_livro' %}">+ Novo livro</a>
+</div>
+
+<form method="get" class="busca">
+  <input type="search" name="q" value="{{ busca }}" placeholder="Buscar por título, autor ou ISBN">
+  <button type="submit">Buscar</button>
+  {% if busca %}<a class="botao secundario" href="{% url 'lista_livros' %}">Limpar</a>{% endif %}
+</form>
+
+<table>
+  <thead><tr><th>Título</th><th>Autor(es)</th><th>Ano</th><th>Disponíveis</th><th></th></tr></thead>
+  <tbody>
+    {% for livro in livros %}
+      <tr>
+        <td><a href="{{ livro.get_absolute_url }}">{{ livro.titulo }}</a></td>
+        <td>{{ livro.nomes_autores|default:"—" }}</td>
+        <td>{{ livro.ano_publicacao }}</td>
+        <td>{{ livro.exemplares_disponiveis.count }} de {{ livro.exemplares.count }}</td>
+        <td class="acoes">
+          <a href="{% url 'editar_livro' livro.pk %}">Editar</a>
+          <a href="{% url 'excluir_livro' livro.pk %}">Excluir</a>
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="vazio">Nenhum livro encontrado.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

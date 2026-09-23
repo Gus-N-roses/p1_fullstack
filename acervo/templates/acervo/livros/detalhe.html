@@ -1,0 +1,58 @@
+{% extends 'acervo/base.html' %}
+
+{% block titulo %}{{ livro.titulo }}{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <h1>{{ livro.titulo }}</h1>
+  <div>
+    <a class="botao secundario" href="{% url 'editar_livro' livro.pk %}">Editar</a>
+    <a class="botao secundario" href="{% url 'excluir_livro' livro.pk %}">Excluir</a>
+  </div>
+</div>
+
+<dl class="detalhes">
+  <dt>Autor(es)</dt><dd>{{ livro.nomes_autores|default:"—" }}</dd>
+  <dt>ISBN</dt><dd>{{ livro.isbn }}</dd>
+  <dt>Editora</dt><dd>{{ livro.editora|default:"—" }}</dd>
+  <dt>Ano</dt><dd>{{ livro.ano_publicacao }}</dd>
+  <dt>Livres agora</dt><dd>{{ quantidade_livre }}</dd>
+  {% if livro.sinopse %}<dt>Sinopse</dt><dd>{{ livro.sinopse|linebreaksbr }}</dd>{% endif %}
+</dl>
+
+<h2>Exemplares</h2>
+<table>
+  <thead><tr><th>Código</th><th>Aquisição</th><th>Situação</th></tr></thead>
+  <tbody>
+    {% for exemplar in exemplares %}
+      <tr>
+        <td>{{ exemplar.codigo }}</td>
+        <td>{{ exemplar.data_aquisicao|date:"d/m/Y" }}</td>
+        <td><span class="etiqueta {{ exemplar.situacao }}">{{ exemplar.situacao }}</span></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3" class="vazio">Nenhum exemplar cadastrado.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Fila de reserva</h2>
+<table>
+  <thead><tr><th>#</th><th>Membro</th><th>Reservado em</th><th>Status</th></tr></thead>
+  <tbody>
+    {% for reserva in fila %}
+      <tr>
+        <td>{{ forloop.counter }}º</td>
+        <td>{{ reserva.membro }}</td>
+        <td>{{ reserva.data_reserva|date:"d/m/Y H:i" }}</td>
+        <td>
+          <span class="etiqueta {{ reserva.status }}">{{ reserva.get_status_display }}</span>
+          {% if reserva.data_limite_retirada %}até {{ reserva.data_limite_retirada|date:"d/m/Y" }}{% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="4" class="vazio">Ninguém na fila.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
