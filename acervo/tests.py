@@ -266,3 +266,24 @@ class BuscaEFiltroLivrosTeste(BaseTeste):
 
         resposta = self.client.get(reverse('lista_livros'), {'status': 'emprestado'})
         self.assertNotContains(resposta, 'Livro Parcialmente Emprestado')
+
+
+class ValidacaoDeAtrasoNoFormularioTeste(BaseTeste):
+    """Feature 2 do P1: validação customizada em EmprestimoForm.clean_membro()."""
+
+    def test_membro_com_atraso_nao_consegue_pegar_outro_livro_pelo_formulario(self):
+        Emprestimo.objects.create(
+            membro=self.ana, exemplar=self.exemplar,
+            data_emprestimo=self.hoje - timedelta(days=20),
+            data_prevista_devolucao=self.hoje - timedelta(days=1),
+        )
+        outro_livro = Livro.objects.create(titulo='1984', isbn='9788535914849', ano_publicacao=1949)
+        outro_exemplar = Exemplar.objects.create(livro=outro_livro, codigo='1984-001')
+
+        resposta = self.client.post(reverse('novo_emprestimo'), {
+            'membro': self.ana.pk, 'exemplar': outro_exemplar.pk,
+        })
+
+        self.assertEqual(resposta.status_code, 200)  # form inválido: não redireciona
+        self.assertContains(resposta, 'atraso')
+        self.assertEqual(Emprestimo.objects.filter(membro=self.ana, exemplar=outro_exemplar).count(), 0)

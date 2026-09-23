@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import Autor, Exemplar, Livro, Membro, Reserva
+from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
 
 
 class DataInput(forms.DateInput):
@@ -53,16 +53,34 @@ class MembroForm(forms.ModelForm):
         return f'{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}'
 
 
-class EmprestimoForm(forms.Form):
-    membro = forms.ModelChoiceField(queryset=Membro.objects.filter(ativo=True))
-    exemplar = forms.ModelChoiceField(
-        queryset=Exemplar.objects.disponiveis().select_related('livro'),
-        help_text='Somente exemplares disponíveis aparecem na lista.',
-    )
-    data_prevista_devolucao = forms.DateField(
-        label='Devolução prevista', required=False, widget=DataInput(),
-        help_text='Deixe em branco para usar o prazo padrão.',
-    )
+class EmprestimoForm(forms.ModelForm):
+    class Meta:
+        model = Emprestimo
+        fields = ['membro', 'exemplar', 'data_prevista_devolucao']
+        widgets = {'data_prevista_devolucao': DataInput()}
+        labels = {'data_prevista_devolucao': 'Devolução prevista'}
+        help_texts = {
+            'exemplar': 'Somente exemplares disponíveis aparecem na lista.',
+            'data_prevista_devolucao': 'Deixe em branco para usar o prazo padrão.',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['membro'].queryset = Membro.objects.filter(ativo=True)
+        self.fields['exemplar'].queryset = Exemplar.objects.disponiveis().select_related('livro')
+        self.fields['data_prevista_devolucao'].required = False
+
+    def clean_membro(self):
+        # Regra de negócio própria do domínio: quem está com um livro atrasado não
+        # pode pegar outro. A definição de "atraso" mora só em Membro.tem_atraso() —
+        # aqui só reaproveitamos, para não duplicar a regra em dois lugares.
+        membro = self.cleaned_data.get('membro')
+        if membro and membro.tem_atraso():
+            raise forms.ValidationError(
+                f'{membro} tem um empréstimo em atraso. É preciso devolvê-lo antes de '
+                'pegar outro livro emprestado.'
+            )
+        return membro
 
 
 class DevolucaoForm(forms.Form):
