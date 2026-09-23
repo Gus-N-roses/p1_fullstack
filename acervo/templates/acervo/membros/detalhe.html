@@ -21,9 +21,12 @@
   <dd>{% if total_multas %}<span class="alerta">R$ {{ total_multas }}</span>{% else %}Nenhuma{% endif %}</dd>
 </dl>
 
-<h2>Empréstimos em aberto</h2>
+<div class="cabecalho-pagina">
+  <h2>Empréstimos em aberto</h2>
+  <a class="botao" href="{% url 'novo_emprestimo' %}?membro={{ membro.pk }}">+ Emprestar livro</a>
+</div>
 <table>
-  <thead><tr><th>Livro</th><th>Exemplar</th><th>Emprestado em</th><th>Devolver até</th><th>Situação</th></tr></thead>
+  <thead><tr><th>Livro</th><th>Exemplar</th><th>Emprestado em</th><th>Devolver até</th><th>Situação</th><th></th></tr></thead>
   <tbody>
     {% for emprestimo in em_aberto %}
       <tr>
@@ -36,9 +39,10 @@
             <span class="alerta">{{ emprestimo.dias_atraso }} dia{{ emprestimo.dias_atraso|pluralize }} de atraso · R$ {{ emprestimo.multa_estimada }}</span>
           {% else %}No prazo{% endif %}
         </td>
+        <td class="acoes"><a href="{% url 'devolver_emprestimo' emprestimo.pk %}">Devolver</a></td>
       </tr>
     {% empty %}
-      <tr><td colspan="5" class="vazio">Nenhum empréstimo em aberto.</td></tr>
+      <tr><td colspan="6" class="vazio">Nenhum empréstimo em aberto.</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -54,7 +58,16 @@
         <td>{{ emprestimo.data_devolucao|date:"d/m/Y" }}</td>
         <td>
           {% if emprestimo.multa %}
-            R$ {{ emprestimo.multa }} {% if emprestimo.multa_paga %}<span class="ok">(paga)</span>{% else %}<span class="alerta">(pendente)</span>{% endif %}
+            R$ {{ emprestimo.multa }}
+            {% if emprestimo.multa_paga %}<span class="ok">(paga)</span>
+            {% else %}
+              <span class="alerta">(pendente)</span>
+              <form method="post" action="{% url 'pagar_multa' emprestimo.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="voltar" value="{{ membro.get_absolute_url }}">
+                <button type="submit" class="link">Registrar pagamento</button>
+              </form>
+            {% endif %}
           {% else %}—{% endif %}
         </td>
       </tr>

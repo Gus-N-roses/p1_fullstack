@@ -1,0 +1,57 @@
+{% extends 'acervo/base.html' %}
+
+{% block titulo %}Empréstimos{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <h1>Empréstimos</h1>
+  <a class="botao" href="{% url 'novo_emprestimo' %}">+ Novo empréstimo</a>
+</div>
+
+<nav class="busca">
+  {% for chave, rotulo in filtros %}
+    <a class="botao {% if chave != filtro %}secundario{% endif %}" href="?filtro={{ chave }}">{{ rotulo }}</a>
+  {% endfor %}
+</nav>
+
+<table>
+  <thead>
+    <tr><th>Livro</th><th>Exemplar</th><th>Membro</th><th>Emprestado</th><th>Previsto</th><th>Devolvido</th><th>Multa</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for emprestimo in emprestimos %}
+      <tr>
+        <td><a href="{{ emprestimo.exemplar.livro.get_absolute_url }}">{{ emprestimo.exemplar.livro }}</a></td>
+        <td>{{ emprestimo.exemplar.codigo }}</td>
+        <td><a href="{{ emprestimo.membro.get_absolute_url }}">{{ emprestimo.membro }}</a></td>
+        <td>{{ emprestimo.data_emprestimo|date:"d/m/Y" }}</td>
+        <td {% if emprestimo.em_aberto and emprestimo.esta_atrasado %}class="alerta"{% endif %}>
+          {{ emprestimo.data_prevista_devolucao|date:"d/m/Y" }}
+        </td>
+        <td>{{ emprestimo.data_devolucao|date:"d/m/Y"|default:"—" }}</td>
+        <td>
+          {% if emprestimo.multa_estimada %}
+            R$ {{ emprestimo.multa_estimada }}
+            {% if emprestimo.em_aberto %}<small>(acumulando)</small>
+            {% elif emprestimo.multa_paga %}<span class="ok">paga</span>
+            {% else %}<span class="alerta">pendente</span>{% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td class="acoes">
+          {% if emprestimo.em_aberto %}
+            <a href="{% url 'devolver_emprestimo' emprestimo.pk %}">Devolver</a>
+          {% elif emprestimo.multa and not emprestimo.multa_paga %}
+            <form method="post" action="{% url 'pagar_multa' emprestimo.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+              <button type="submit" class="link">Pagar multa</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="8" class="vazio">Nenhum empréstimo neste filtro.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

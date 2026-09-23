@@ -1,0 +1,23 @@
+{% extends 'acervo/base.html' %}
+
+{% block titulo %}Devolução{% endblock %}
+
+{% block conteudo %}
+<h1>Registrar devolução</h1>
+
+<dl class="detalhes">
+  <dt>Livro</dt><dd>{{ emprestimo.exemplar.livro }} ({{ emprestimo.exemplar.codigo }})</dd>
+  <dt>Membro</dt><dd>{{ emprestimo.membro }}</dd>
+  <dt>Emprestado em</dt><dd>{{ emprestimo.data_emprestimo|date:"d/m/Y" }}</dd>
+  <dt>Devolver até</dt><dd>{{ emprestimo.data_prevista_devolucao|date:"d/m/Y" }}</dd>
+  <dt>Multa se devolvido hoje</dt>
+  <dd>{% if emprestimo.esta_atrasado %}<span class="alerta">R$ {{ emprestimo.multa_estimada }} ({{ emprestimo.dias_atraso }} dia{{ emprestimo.dias_atraso|pluralize }})</span>{% else %}Sem multa{% endif %}</dd>
+</dl>
+
+<form method="post" class="formulario" style="margin-top: 1rem">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Confirmar devolução</button>
+  <a class="botao secundario" href="{% url 'lista_emprestimos' %}">Cancelar</a>
+</form>
+{% endblock %}

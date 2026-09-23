@@ -3,7 +3,10 @@
 {% block titulo %}Início{% endblock %}
 
 {% block conteudo %}
-<h1>Painel da biblioteca</h1>
+<div class="cabecalho-pagina">
+  <h1>Painel da biblioteca</h1>
+  <a class="botao" href="{% url 'novo_emprestimo' %}">+ Novo empréstimo</a>
+</div>
 
 <section class="cartoes">
   <div class="cartao"><span class="numero">{{ total_livros }}</span> títulos</div>
@@ -14,7 +17,7 @@
 
 <h2>Empréstimos em atraso</h2>
 <table>
-  <thead><tr><th>Livro</th><th>Exemplar</th><th>Membro</th><th>Previsto</th><th>Atraso</th><th>Multa até hoje</th></tr></thead>
+  <thead><tr><th>Livro</th><th>Exemplar</th><th>Membro</th><th>Previsto</th><th>Atraso</th><th>Multa até hoje</th><th></th></tr></thead>
   <tbody>
     {% for emprestimo in atrasados %}
       <tr>
@@ -24,9 +27,10 @@
         <td>{{ emprestimo.data_prevista_devolucao|date:"d/m/Y" }}</td>
         <td class="alerta">{{ emprestimo.dias_atraso }} dia{{ emprestimo.dias_atraso|pluralize }}</td>
         <td>R$ {{ emprestimo.multa_estimada }}</td>
+        <td class="acoes"><a href="{% url 'devolver_emprestimo' emprestimo.pk %}">Devolver</a></td>
       </tr>
     {% empty %}
-      <tr><td colspan="6" class="vazio">Nenhum empréstimo em atraso. 🎉</td></tr>
+      <tr><td colspan="7" class="vazio">Nenhum empréstimo em atraso. 🎉</td></tr>
     {% endfor %}
   </tbody>
 </table>

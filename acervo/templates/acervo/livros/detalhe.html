@@ -33,6 +33,7 @@
         <td>{{ exemplar.data_aquisicao|date:"d/m/Y" }}</td>
         <td><span class="etiqueta {{ exemplar.situacao }}">{{ exemplar.situacao }}</span></td>
         <td class="acoes">
+          {% if exemplar.esta_disponivel %}<a href="{% url 'novo_emprestimo' %}?exemplar={{ exemplar.pk }}">Emprestar</a>{% endif %}
           <a href="{% url 'editar_exemplar' exemplar.pk %}">Editar</a>
           <a href="{% url 'excluir_exemplar' exemplar.pk %}">Excluir</a>
         </td>

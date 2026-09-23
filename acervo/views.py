@@ -1,9 +1,11 @@
 from django.contrib import messages
 from django.db.models import Count, ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 from django.utils import timezone
 
-from .forms import AutorForm, ExemplarForm, LivroForm, MembroForm
+from . import regras
+from .forms import AutorForm, DevolucaoForm, EmprestimoForm, ExemplarForm, LivroForm, MembroForm
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
 
 
@@ -183,3 +185,99 @@ def editar_membro(request, pk):
 def excluir_membro(request, pk):
     membro = get_object_or_404(Membro, pk=pk)
     return _excluir(request, membro, 'lista_membros', membro.get_absolute_url())
+
+
+# ---------------------------------------------------------------------------
+# Empréstimos
+# ---------------------------------------------------------------------------
+
+FILTROS_EMPRESTIMO = {
+    'abertos': ('Em aberto', Q(data_devolucao__isnull=True)),
+    'atrasados': ('Atrasados', Q(data_devolucao__isnull=True)),  # refinado na view (depende de hoje)
+    'devolvidos': ('Devolvidos', Q(data_devolucao__isnull=False)),
+    'multas': ('Multas pendentes', Q(data_devolucao__isnull=False, multa__gt=0, multa_paga=False)),
+    'todos': ('Todos', Q()),
+}
+
+
+def lista_emprestimos(request):
+    filtro = request.GET.get('filtro', 'abertos')
+    if filtro not in FILTROS_EMPRESTIMO:
+        filtro = 'abertos'
+    emprestimos = Emprestimo.objects.filter(FILTROS_EMPRESTIMO[filtro][1]).select_related(
+        'membro', 'exemplar__livro',
+    )
+    if filtro == 'atrasados':
+        emprestimos = emprestimos.filter(data_prevista_devolucao__lt=timezone.localdate())
+    filtros = [(chave, rotulo) for chave, (rotulo, _) in FILTROS_EMPRESTIMO.items()]
+    return render(request, 'acervo/emprestimos/lista.html', {
+        'emprestimos': emprestimos, 'filtro': filtro, 'filtros': filtros,
+    })
+
+
+def novo_emprestimo(request):
+    if request.method == 'POST':
+        form = EmprestimoForm(request.POST)
+        if form.is_valid():
+            try:
+                emprestimo = regras.realizar_emprestimo(
+                    form.cleaned_data['membro'],
+                    form.cleaned_data['exemplar'],
+                    form.cleaned_data['data_prevista_devolucao'],
+                )
+            except regras.RegraNegocioErro as erro:
+                form.add_error(None, str(erro))
+            else:
+                messages.success(
+                    request,
+                    f'Empréstimo registrado. Devolver até {emprestimo.data_prevista_devolucao:%d/%m/%Y}.',
+                )
+                return redirect('lista_emprestimos')
+    else:
+        form = EmprestimoForm(initial={
+            'membro': request.GET.get('membro'),
+            'exemplar': request.GET.get('exemplar'),
+        })
+    return render(request, 'acervo/form.html', {'form': form, 'titulo': 'Novo empréstimo'})
+
+
+def devolver_emprestimo(request, pk):
+    emprestimo = get_object_or_404(Emprestimo.objects.select_related('membro', 'exemplar__livro'), pk=pk)
+    if not emprestimo.em_aberto:
+        messages.warning(request, 'Este empréstimo já foi devolvido.')
+        return redirect('lista_emprestimos')
+
+    if request.method == 'POST':
+        form = DevolucaoForm(request.POST)
+        if form.is_valid():
+            try:
+                emprestimo = regras.registrar_devolucao(emprestimo, form.cleaned_data['data_devolucao'])
+            except regras.RegraNegocioErro as erro:
+                form.add_error(None, str(erro))
+            else:
+                if emprestimo.multa:
+                    messages.warning(
+                        request,
+                        f'Devolução com {emprestimo.dias_atraso()} dia(s) de atraso: multa de R$ {emprestimo.multa}.',
+                    )
+                else:
+                    messages.success(request, 'Devolução registrada dentro do prazo.')
+                separada = emprestimo.exemplar.livro.reservas.filter(status=Reserva.DISPONIVEL).first()
+                if separada:
+                    messages.info(request, f'"{separada.livro}" foi separado para {separada.membro} (fila de reserva).')
+                return redirect('lista_emprestimos')
+    else:
+        form = DevolucaoForm(initial={'data_devolucao': timezone.localdate()})
+    return render(request, 'acervo/emprestimos/devolver.html', {'form': form, 'emprestimo': emprestimo})
+
+
+@require_POST
+def pagar_multa(request, pk):
+    emprestimo = get_object_or_404(Emprestimo, pk=pk)
+    try:
+        regras.pagar_multa(emprestimo)
+    except regras.RegraNegocioErro as erro:
+        messages.error(request, str(erro))
+    else:
+        messages.success(request, f'Multa de R$ {emprestimo.multa} quitada.')
+    return redirect(request.POST.get('voltar') or 'lista_emprestimos')
