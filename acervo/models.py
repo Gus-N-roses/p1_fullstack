@@ -56,3 +56,66 @@ class Livro(models.Model):
         """Exemplares disponíveis que NÃO estão separados para alguém da fila."""
         separados = self.reservas.filter(status=Reserva.DISPONIVEL).count()
         return max(self.exemplares_disponiveis().count() - separados, 0)
+
+
+class Exemplar(models.Model):
+    livro = models.ForeignKey(Livro, on_delete=models.CASCADE, related_name='exemplares')
+    codigo = models.CharField('código de tombo', max_length=30, unique=True)
+    data_aquisicao = models.DateField('data de aquisição', default=timezone.localdate)
+    ativo = models.BooleanField(
+        'em circulação', default=True,
+        help_text='Desmarque para exemplares perdidos, danificados ou em manutenção.',
+    )
+
+    class Meta:
+        ordering = ['livro__titulo', 'codigo']
+        verbose_name_plural = 'exemplares'
+
+    def __str__(self):
+        return f'{self.codigo} — {self.livro.titulo}'
+
+    def emprestimo_atual(self):
+        return self.emprestimos.filter(data_devolucao__isnull=True).first()
+
+    @property
+    def esta_disponivel(self):
+        return self.ativo and self.emprestimo_atual() is None
+
+    @property
+    def situacao(self):
+        if not self.ativo:
+            return 'Fora de circulação'
+        return 'Emprestado' if self.emprestimo_atual() else 'Disponível'
+
+
+class Membro(models.Model):
+    nome = models.CharField(max_length=150)
+    cpf = models.CharField('CPF', max_length=14, unique=True)
+    email = models.EmailField('e-mail', unique=True)
+    telefone = models.CharField(max_length=20, blank=True)
+    data_cadastro = models.DateField('data de cadastro', auto_now_add=True)
+    ativo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['nome']
+
+    def __str__(self):
+        return self.nome
+
+    def get_absolute_url(self):
+        return reverse('membro_detalhe', args=[self.pk])
+
+    def emprestimos_em_aberto(self):
+        return self.emprestimos.filter(data_devolucao__isnull=True)
+
+    def multas_pendentes(self):
+        return self.emprestimos.filter(multa__gt=0, multa_paga=False, data_devolucao__isnull=False)
+
+    def total_multas_pendentes(self):
+        total = self.multas_pendentes().aggregate(total=models.Sum('multa'))['total']
+        return total or Decimal('0.00')
+
+    def tem_atraso(self):
+        return self.emprestimos_em_aberto().filter(
+            data_prevista_devolucao__lt=timezone.localdate(),
+        ).exists()
