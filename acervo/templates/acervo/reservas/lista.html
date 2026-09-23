@@ -1,0 +1,47 @@
+{% extends 'acervo/base.html' %}
+
+{% block titulo %}Reservas{% endblock %}
+
+{% block conteudo %}
+<div class="cabecalho-pagina">
+  <h1>Filas de reserva</h1>
+  <a class="botao" href="{% url 'nova_reserva' %}">+ Nova reserva</a>
+</div>
+
+<nav class="busca">
+  <a class="botao {% if mostrar_todas %}secundario{% endif %}" href="{% url 'lista_reservas' %}">Ativas</a>
+  <a class="botao {% if not mostrar_todas %}secundario{% endif %}" href="?todas=1">Todas</a>
+</nav>
+
+<table>
+  <thead><tr><th>Livro</th><th>Posição</th><th>Membro</th><th>Reservado em</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    {% for reserva in reservas %}
+      <tr>
+        <td><a href="{{ reserva.livro.get_absolute_url }}">{{ reserva.livro }}</a></td>
+        <td>{% if reserva.ativa %}{{ reserva.posicao_na_fila }}º{% else %}—{% endif %}</td>
+        <td><a href="{{ reserva.membro.get_absolute_url }}">{{ reserva.membro }}</a></td>
+        <td>{{ reserva.data_reserva|date:"d/m/Y H:i" }}</td>
+        <td>
+          <span class="etiqueta {{ reserva.status }}">{{ reserva.get_status_display }}</span>
+          {% if reserva.status == 'disponivel' %}até {{ reserva.data_limite_retirada|date:"d/m/Y" }}{% endif %}
+        </td>
+        <td class="acoes">
+          {% if reserva.status == 'disponivel' %}
+            <a href="{% url 'novo_emprestimo' %}?membro={{ reserva.membro.pk }}">Emprestar</a>
+          {% endif %}
+          {% if reserva.ativa %}
+            <form method="post" action="{% url 'cancelar_reserva' reserva.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+              <button type="submit" class="link">Cancelar</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="vazio">Nenhuma reserva.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

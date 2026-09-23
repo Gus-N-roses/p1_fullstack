@@ -5,7 +5,9 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 
 from . import regras
-from .forms import AutorForm, DevolucaoForm, EmprestimoForm, ExemplarForm, LivroForm, MembroForm
+from .forms import (
+    AutorForm, DevolucaoForm, EmprestimoForm, ExemplarForm, LivroForm, MembroForm, ReservaForm,
+)
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
 
 
@@ -281,3 +283,56 @@ def pagar_multa(request, pk):
     else:
         messages.success(request, f'Multa de R$ {emprestimo.multa} quitada.')
     return redirect(request.POST.get('voltar') or 'lista_emprestimos')
+
+
+# ---------------------------------------------------------------------------
+# Reservas (fila)
+# ---------------------------------------------------------------------------
+
+def lista_reservas(request):
+    # Vence as retiradas fora do prazo e passa a vez para o próximo da fila
+    livros_vencidos = Livro.objects.filter(
+        reservas__status=Reserva.DISPONIVEL,
+        reservas__data_limite_retirada__lt=timezone.localdate(),
+    ).distinct()
+    for livro in livros_vencidos:
+        regras.processar_fila(livro)
+
+    mostrar_todas = request.GET.get('todas') == '1'
+    reservas = Reserva.objects.select_related('livro', 'membro').order_by('livro__titulo', 'data_reserva', 'pk')
+    if not mostrar_todas:
+        reservas = reservas.filter(status__in=[Reserva.AGUARDANDO, Reserva.DISPONIVEL])
+    return render(request, 'acervo/reservas/lista.html', {
+        'reservas': reservas, 'mostrar_todas': mostrar_todas,
+    })
+
+
+def nova_reserva(request):
+    if request.method == 'POST':
+        form = ReservaForm(request.POST)
+        if form.is_valid():
+            try:
+                reserva = regras.criar_reserva(form.cleaned_data['membro'], form.cleaned_data['livro'])
+            except regras.RegraNegocioErro as erro:
+                form.add_error(None, str(erro))
+            else:
+                messages.success(
+                    request,
+                    f'{reserva.membro} entrou na fila de "{reserva.livro}" na posição {reserva.posicao_na_fila()}.',
+                )
+                return redirect(reserva.livro.get_absolute_url())
+    else:
+        form = ReservaForm(initial={'livro': request.GET.get('livro'), 'membro': request.GET.get('membro')})
+    return render(request, 'acervo/form.html', {'form': form, 'titulo': 'Nova reserva'})
+
+
+@require_POST
+def cancelar_reserva(request, pk):
+    reserva = get_object_or_404(Reserva, pk=pk)
+    try:
+        regras.cancelar_reserva(reserva)
+    except regras.RegraNegocioErro as erro:
+        messages.error(request, str(erro))
+    else:
+        messages.success(request, f'Reserva de {reserva.membro} para "{reserva.livro}" cancelada.')
+    return redirect(request.POST.get('voltar') or 'lista_reservas')

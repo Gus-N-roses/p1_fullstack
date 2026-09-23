@@ -37,16 +37,17 @@
 
 <h2>Reservas prontas para retirada</h2>
 <table>
-  <thead><tr><th>Livro</th><th>Membro</th><th>Retirar até</th></tr></thead>
+  <thead><tr><th>Livro</th><th>Membro</th><th>Retirar até</th><th></th></tr></thead>
   <tbody>
     {% for reserva in reservas_para_retirada %}
       <tr>
         <td>{{ reserva.livro }}</td>
         <td>{{ reserva.membro }}</td>
         <td>{{ reserva.data_limite_retirada|date:"d/m/Y" }}</td>
+        <td class="acoes"><a href="{% url 'novo_emprestimo' %}?membro={{ reserva.membro.pk }}">Emprestar</a></td>
       </tr>
     {% empty %}
-      <tr><td colspan="3" class="vazio">Nenhuma reserva aguardando retirada.</td></tr>
+      <tr><td colspan="4" class="vazio">Nenhuma reserva aguardando retirada.</td></tr>
     {% endfor %}
   </tbody>
 </table>

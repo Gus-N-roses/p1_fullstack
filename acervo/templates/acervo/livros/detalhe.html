@@ -44,9 +44,14 @@
   </tbody>
 </table>
 
-<h2>Fila de reserva</h2>
+<div class="cabecalho-pagina">
+  <h2>Fila de reserva</h2>
+  {% if quantidade_livre == 0 %}
+    <a class="botao" href="{% url 'nova_reserva' %}?livro={{ livro.pk }}">+ Reservar</a>
+  {% endif %}
+</div>
 <table>
-  <thead><tr><th>#</th><th>Membro</th><th>Reservado em</th><th>Status</th></tr></thead>
+  <thead><tr><th>#</th><th>Membro</th><th>Reservado em</th><th>Status</th><th></th></tr></thead>
   <tbody>
     {% for reserva in fila %}
       <tr>
@@ -57,9 +62,16 @@
           <span class="etiqueta {{ reserva.status }}">{{ reserva.get_status_display }}</span>
           {% if reserva.data_limite_retirada %}até {{ reserva.data_limite_retirada|date:"d/m/Y" }}{% endif %}
         </td>
+        <td class="acoes">
+          <form method="post" action="{% url 'cancelar_reserva' reserva.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="voltar" value="{{ livro.get_absolute_url }}">
+            <button type="submit" class="link">Cancelar</button>
+          </form>
+        </td>
       </tr>
     {% empty %}
-      <tr><td colspan="4" class="vazio">Ninguém na fila.</td></tr>
+      <tr><td colspan="5" class="vazio">Ninguém na fila.</td></tr>
     {% endfor %}
   </tbody>
 </table>
