@@ -19,6 +19,18 @@ class Organizacao(models.Model):
         return self.nome
 
 
+class Perfil(models.Model):
+    """Vincula um usuário do Django a uma organização."""
+    usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='perfil')
+    organizacao = models.ForeignKey(Organizacao, on_delete=models.CASCADE, related_name='perfis')
+
+    class Meta:
+        verbose_name_plural = 'perfis'
+
+    def __str__(self):
+        return f'{self.usuario} ({self.organizacao})'
+
+
 class OrganizacaoBase(models.Model):
     """Base abstrata: toda entidade do acervo pertence a uma organização."""
     organizacao = models.ForeignKey(Organizacao, on_delete=models.CASCADE)

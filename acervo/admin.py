@@ -1,11 +1,32 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import User
 
-from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
+from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Organizacao, Perfil, Reserva
 
 
 class ExemplarInline(admin.TabularInline):
     model = Exemplar
     extra = 1
+
+
+class PerfilInline(admin.StackedInline):
+    model = Perfil
+    can_delete = False
+
+
+class CustomUserAdmin(UserAdmin):
+    inlines = [PerfilInline]
+
+
+admin.site.unregister(User)
+admin.site.register(User, CustomUserAdmin)
+
+
+@admin.register(Organizacao)
+class OrganizacaoAdmin(admin.ModelAdmin):
+    list_display = ['nome', 'slug']
+    search_fields = ['nome', 'slug']
 
 
 @admin.register(Autor)
