@@ -7,7 +7,27 @@ from django.urls import reverse
 from django.utils import timezone
 
 
-class Autor(models.Model):
+class Organizacao(models.Model):
+    nome = models.CharField(max_length=150)
+    slug = models.SlugField(max_length=150, unique=True)
+
+    class Meta:
+        ordering = ['nome']
+        verbose_name_plural = 'organizações'
+
+    def __str__(self):
+        return self.nome
+
+
+class OrganizacaoBase(models.Model):
+    """Base abstrata: toda entidade do acervo pertence a uma organização."""
+    organizacao = models.ForeignKey(Organizacao, on_delete=models.CASCADE)
+
+    class Meta:
+        abstract = True
+
+
+class Autor(OrganizacaoBase):
     nome = models.CharField(max_length=150)
     nacionalidade = models.CharField(max_length=80, blank=True)
     data_nascimento = models.DateField('data de nascimento', null=True, blank=True)
@@ -20,7 +40,7 @@ class Autor(models.Model):
         return self.nome
 
 
-class Livro(models.Model):
+class Livro(OrganizacaoBase):
     titulo = models.CharField('título', max_length=200)
     autores = models.ManyToManyField(Autor, related_name='livros')
     isbn = models.CharField('ISBN', max_length=17, unique=True)
@@ -67,7 +87,7 @@ class ExemplarQuerySet(models.QuerySet):
         return self.filter(ativo=True).exclude(pk__in=em_aberto)
 
 
-class Exemplar(models.Model):
+class Exemplar(OrganizacaoBase):
     livro = models.ForeignKey(Livro, on_delete=models.CASCADE, related_name='exemplares')
     codigo = models.CharField('código de tombo', max_length=30, unique=True)
     data_aquisicao = models.DateField('data de aquisição', default=timezone.localdate)
@@ -99,7 +119,7 @@ class Exemplar(models.Model):
         return 'Emprestado' if self.emprestimo_atual() else 'Disponível'
 
 
-class Membro(models.Model):
+class Membro(OrganizacaoBase):
     nome = models.CharField(max_length=150)
     cpf = models.CharField('CPF', max_length=14, unique=True)
     email = models.EmailField('e-mail', unique=True)
@@ -136,7 +156,7 @@ def data_prevista_padrao():
     return timezone.localdate() + timedelta(days=settings.PRAZO_EMPRESTIMO_DIAS)
 
 
-class Emprestimo(models.Model):
+class Emprestimo(OrganizacaoBase):
     exemplar = models.ForeignKey(Exemplar, on_delete=models.PROTECT, related_name='emprestimos')
     membro = models.ForeignKey(Membro, on_delete=models.PROTECT, related_name='emprestimos')
     data_emprestimo = models.DateField('data do empréstimo', default=timezone.localdate)
@@ -182,7 +202,7 @@ class Emprestimo(models.Model):
         return self.calcular_multa() if self.em_aberto else self.multa
 
 
-class Reserva(models.Model):
+class Reserva(OrganizacaoBase):
     AGUARDANDO = 'aguardando'
     DISPONIVEL = 'disponivel'
     ATENDIDA = 'atendida'
