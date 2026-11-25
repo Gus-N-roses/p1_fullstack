@@ -26,7 +26,7 @@ class Perfil(models.Model):
     PAPEIS = [(ADMIN, 'Administrador'), (OPERADOR, 'Operador')]
 
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='perfil')
-    organizacao = models.ForeignKey(Organizacao, on_delete=models.CASCADE, related_name='perfis')
+    organizacao = models.ForeignKey(Organizacao, on_delete=models.PROTECT, related_name='perfis')
     # Padrão com o menor acesso: virar administrador é uma escolha explícita
     papel = models.CharField(max_length=20, choices=PAPEIS, default=OPERADOR)
 
@@ -48,7 +48,7 @@ def unico_por_organizacao(campo, nome):
 
 class OrganizacaoBase(models.Model):
     """Base abstrata: toda entidade do acervo pertence a uma organização."""
-    organizacao = models.ForeignKey(Organizacao, on_delete=models.CASCADE)
+    organizacao = models.ForeignKey(Organizacao, on_delete=models.PROTECT)
 
     class Meta:
         abstract = True

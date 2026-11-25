@@ -5,6 +5,7 @@ from io import StringIO
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -740,3 +741,24 @@ class AdminOrganizacaoTeste(BaseTeste):
         url = reverse('admin:acervo_autor_changelist')
         resposta = self.client.get(url, {'organizacao__id__exact': outra.pk})
         self.assertEqual([autor.nome for autor in resposta.context['cl'].result_list], ['Autor de Fora'])
+
+
+class ExclusaoDeOrganizacaoTeste(BaseTeste):
+    def test_organizacao_com_acervo_e_perfis_nao_pode_ser_excluida(self):
+        with self.assertRaises(ProtectedError):
+            self.org.delete()
+        self.assertTrue(Livro.objects.filter(pk=self.livro.pk).exists())
+
+    def test_cada_vinculo_sozinho_ja_protege(self):
+        so_perfil = Organizacao.objects.create(nome='Só perfil', slug='so-perfil')
+        Perfil.objects.create(usuario=User.objects.create_user('outro'), organizacao=so_perfil)
+        so_acervo = Organizacao.objects.create(nome='Só acervo', slug='so-acervo')
+        Autor.objects.create(organizacao=so_acervo, nome='Autor')
+        for organizacao in (so_perfil, so_acervo):
+            with self.subTest(organizacao=organizacao), self.assertRaises(ProtectedError):
+                organizacao.delete()
+
+    def test_organizacao_vazia_pode_ser_excluida(self):
+        vazia = Organizacao.objects.create(nome='Vazia', slug='vazia')
+        vazia.delete()
+        self.assertFalse(Organizacao.objects.filter(slug='vazia').exists())
