@@ -928,3 +928,32 @@ class PrepararDemoTeste(TestCase):
     def test_recusa_senha_fraca(self):
         with self.assertRaisesMessage(CommandError, 'Senha fraca'):
             self.preparar(senha='123')
+
+
+class DashboardPorPapelTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        regras.realizar_emprestimo(self.ana, self.exemplar)
+
+    def abrir(self, papel):
+        Perfil.objects.filter(usuario=self.usuario).update(papel=papel)
+        resposta = self.client.get(reverse('dashboard'))
+        self.assertEqual(resposta.status_code, 200)
+        return resposta
+
+    def test_administrador_ve_a_serie(self):
+        resposta = self.abrir(Perfil.ADMIN)
+        self.assertContains(resposta, 'Empréstimos por mês')
+        self.assertContains(resposta, 'id="dados-mes"')
+
+    def test_operador_ve_totais_e_ranking_mas_nao_a_serie(self):
+        resposta = self.abrir(Perfil.OPERADOR)
+        self.assertContains(resposta, 'empréstimos feitos')
+        self.assertContains(resposta, 'Dom Casmurro')
+        self.assertContains(resposta, 'Reservas do período por status')
+        for escondido in ['Empréstimos por mês', 'dados-mes', 'grafico-mensal', 'chart.umd.js']:
+            with self.subTest(escondido=escondido):
+                self.assertNotContains(resposta, escondido)
+        # nem no contexto da página
+        self.assertNotIn('por_mes', resposta.context['metricas'])
+        self.assertNotIn('grafico_mensal', resposta.context['metricas'])

@@ -12,7 +12,7 @@ from .forms import (
     AutorForm, DevolucaoForm, EmprestimoForm, ExemplarForm, LivroForm, MembroForm, PeriodoForm, ReservaForm,
 )
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
-from .permissoes import somente_admin
+from .permissoes import eh_admin, somente_admin
 
 
 def org_atual(request):
@@ -57,10 +57,16 @@ def inicio(request):
 
 def dashboard(request):
     form_periodo, periodo = _periodo(request)
+    dados = metricas.do_periodo(org_atual(request), periodo['de'], periodo['ate'])
+    mostra_series = eh_admin(request.user)
+    if not mostra_series:
+        # Não basta esconder no template: o operador nem recebe os dados da série
+        del dados['por_mes'], dados['grafico_mensal']
     return render(request, 'acervo/dashboard.html', {
         'form_periodo': form_periodo,
         'periodo': periodo,
-        'metricas': metricas.do_periodo(org_atual(request), periodo['de'], periodo['ate']),
+        'metricas': dados,
+        'mostra_series': mostra_series,
     })
 
 

@@ -129,6 +129,8 @@ O Django Admin fica fora do isolamento: o superusuário enxerga todas as organiz
 | Empréstimos, devoluções, multas, reservas e membros | sim | sim |
 | Consultar autores, livros e exemplares | sim | sim |
 | Cadastrar, editar e excluir autores, livros e exemplares | sim | não |
+| Dashboard: totais, rankings e reservas por status | sim | sim |
+| Dashboard: série de empréstimos por mês | sim | não |
 
 O papel é definido no **Perfil** do usuário (padrão: operador) e vale nas telas e na API.
 
