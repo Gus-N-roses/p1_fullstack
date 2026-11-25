@@ -762,3 +762,50 @@ class ExclusaoDeOrganizacaoTeste(BaseTeste):
         vazia = Organizacao.objects.create(nome='Vazia', slug='vazia')
         vazia.delete()
         self.assertFalse(Organizacao.objects.filter(slug='vazia').exists())
+
+
+class RoteiroDeIsolamentoTeste(BaseTeste):
+    """Os cinco cenários do roteiro anotado no README. A = self.org, B = outra."""
+
+    def setUp(self):
+        super().setUp()
+        b = Organizacao.objects.create(nome='Biblioteca B', slug='b')
+        self.livro_b = Livro.objects.create(organizacao=b, titulo='Livro da B', isbn='9780000000099',
+                                            ano_publicacao=2000)
+        Autor.objects.create(organizacao=b, nome='Autor da B')
+        Exemplar.objects.create(organizacao=b, livro=self.livro_b, codigo='DA-B-1')
+        Membro.objects.create(organizacao=b, nome='Membro da B', cpf='999.999.999-99', email='b@exemplo.com')
+
+    def criar_livro(self, isbn):
+        return self.client.post(reverse('novo_livro'), {
+            'titulo': 'Criado por A', 'autores': [Autor.objects.get(organizacao=self.org).pk],
+            'isbn': isbn, 'ano_publicacao': 2000,
+        })
+
+    def test_1_lista_so_mostra_livros_de_a(self):
+        resposta = self.client.get(reverse('lista_livros'))
+        self.assertContains(resposta, 'Dom Casmurro')
+        self.assertNotContains(resposta, 'Livro da B')
+
+    def test_2_editar_livro_de_b_responde_404(self):
+        self.assertEqual(self.client.get(reverse('editar_livro', args=[self.livro_b.pk])).status_code, 404)
+
+    def test_3_livro_criado_fica_em_a(self):
+        self.criar_livro('9780000000011')
+        self.assertEqual(Livro.objects.get(titulo='Criado por A').organizacao, self.org)
+
+    def test_4_selects_so_oferecem_opcoes_de_a(self):
+        for rota, de_fora in [
+            ('novo_livro', ['Autor da B']),
+            ('novo_exemplar', ['Livro da B']),
+            ('novo_emprestimo', ['Membro da B', 'DA-B-1']),
+            ('nova_reserva', ['Livro da B', 'Membro da B']),
+        ]:
+            resposta = self.client.get(reverse(rota))
+            for texto in de_fora:
+                with self.subTest(rota=rota, texto=texto):
+                    self.assertNotContains(resposta, texto)
+
+    def test_5_isbn_de_b_pode_ser_cadastrado_em_a(self):
+        self.assertEqual(self.criar_livro(self.livro_b.isbn).status_code, 302)
+        self.assertTrue(Livro.objects.filter(organizacao=self.org, isbn=self.livro_b.isbn).exists())

@@ -74,6 +74,27 @@ movimento de um período (padrão: últimos 30 dias), calculado em
 - multas geradas nas devoluções do período e quanto delas segue sem pagamento;
 - os 5 livros mais emprestados e os 5 membros que mais pegaram livros.
 
+## Roteiro de isolamento (Aula 14)
+
+Duas organizações, A e B, com um usuário logado em A. Executado em 25/11/2026 por testes
+automatizados (não é um registro de teste manual no navegador):
+
+| Cenário | Esperado | Resultado |
+|---|---|---|
+| Usuário A abre a lista de livros | vê só os livros de A | passou |
+| Usuário A abre `/livros/<id de B>/editar/` | 404 | passou |
+| Usuário A cria um livro | gravado em A | passou |
+| Formulários de livro, exemplar, empréstimo e reserva | selects só com opções de A | passou |
+| Usuário A cadastra um ISBN que B já usa | permitido | passou |
+
+Para repetir:
+
+```bash
+python manage.py test acervo.tests.RoteiroDeIsolamentoTeste
+```
+
+O Django Admin fica fora do isolamento: o superusuário enxerga todas as organizações.
+
 ## Papéis
 
 | Ação | Administrador | Operador |
