@@ -37,13 +37,15 @@ class OrganizacaoAdmin(admin.ModelAdmin):
 
 @admin.register(Autor)
 class AutorAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'nacionalidade', 'data_nascimento']
+    list_display = ['nome', 'nacionalidade', 'data_nascimento', 'organizacao']
+    list_filter = ['organizacao']
     search_fields = ['nome']
 
 
 @admin.register(Livro)
 class LivroAdmin(admin.ModelAdmin):
-    list_display = ['titulo', 'isbn', 'editora', 'ano_publicacao']
+    list_display = ['titulo', 'isbn', 'editora', 'ano_publicacao', 'organizacao']
+    list_filter = ['organizacao']
     search_fields = ['titulo', 'isbn', 'autores__nome']
     filter_horizontal = ['autores']
     inlines = [ExemplarInline]
@@ -51,28 +53,28 @@ class LivroAdmin(admin.ModelAdmin):
 
 @admin.register(Exemplar)
 class ExemplarAdmin(admin.ModelAdmin):
-    list_display = ['codigo', 'livro', 'ativo', 'situacao']
-    list_filter = ['ativo']
+    list_display = ['codigo', 'livro', 'ativo', 'situacao', 'organizacao']
+    list_filter = ['organizacao', 'ativo']
     search_fields = ['codigo', 'livro__titulo']
 
 
 @admin.register(Membro)
 class MembroAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'cpf', 'email', 'ativo']
-    list_filter = ['ativo']
+    list_display = ['nome', 'cpf', 'email', 'ativo', 'organizacao']
+    list_filter = ['organizacao', 'ativo']
     search_fields = ['nome', 'cpf', 'email']
 
 
 @admin.register(Emprestimo)
 class EmprestimoAdmin(admin.ModelAdmin):
     list_display = ['exemplar', 'membro', 'data_emprestimo', 'data_prevista_devolucao',
-                    'data_devolucao', 'multa', 'multa_paga']
-    list_filter = ['multa_paga', 'data_devolucao']
+                    'data_devolucao', 'multa', 'multa_paga', 'organizacao']
+    list_filter = ['organizacao', 'multa_paga', 'data_devolucao']
     search_fields = ['membro__nome', 'exemplar__codigo', 'exemplar__livro__titulo']
 
 
 @admin.register(Reserva)
 class ReservaAdmin(admin.ModelAdmin):
-    list_display = ['livro', 'membro', 'data_reserva', 'status', 'data_limite_retirada']
-    list_filter = ['status']
+    list_display = ['livro', 'membro', 'data_reserva', 'status', 'data_limite_retirada', 'organizacao']
+    list_filter = ['organizacao', 'status']
     search_fields = ['livro__titulo', 'membro__nome']

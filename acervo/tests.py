@@ -723,3 +723,20 @@ class UnicidadePorOrganizacaoTeste(BaseTeste):
     def test_banco_tambem_recusa_repetido(self):
         with self.assertRaises(IntegrityError), transaction.atomic():
             Livro.objects.create(organizacao=self.org, titulo='X', isbn=self.livro.isbn, ano_publicacao=2000)
+
+
+class AdminOrganizacaoTeste(BaseTeste):
+    def test_listas_mostram_e_filtram_por_organizacao(self):
+        outra = Organizacao.objects.create(nome='Outra Biblioteca', slug='outra')
+        Autor.objects.create(organizacao=outra, nome='Autor de Fora')
+        self.client.force_login(User.objects.create_superuser('dono'))
+        for model in (Autor, Livro, Exemplar, Membro, Emprestimo, Reserva):
+            with self.subTest(model=model.__name__):
+                resposta = self.client.get(reverse(f'admin:acervo_{model._meta.model_name}_changelist'))
+                lista = resposta.context['cl']
+                self.assertIn('organizacao', lista.list_display)
+                self.assertIn('organizacao', lista.list_filter)
+
+        url = reverse('admin:acervo_autor_changelist')
+        resposta = self.client.get(url, {'organizacao__id__exact': outra.pk})
+        self.assertEqual([autor.nome for autor in resposta.context['cl'].result_list], ['Autor de Fora'])
