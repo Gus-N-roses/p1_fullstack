@@ -1124,3 +1124,43 @@ class ConsultasTeste(BaseTeste):
         carregadas = regras.carregar_posicoes(list(Reserva.objects.order_by('pk')), self.org)
         self.assertEqual([r.posicao_na_fila() for r in carregadas], [None, 1, 2])
         self.assertEqual([Reserva.objects.get(pk=r.pk).posicao_na_fila() for r in reservas], [None, 1, 2])
+
+
+class ConferenciaDoDashboardTeste(BaseTeste):
+    """Aula 17: números pequenos e conhecidos (3 na organização A, 5 na B)."""
+
+    def setUp(self):
+        super().setUp()
+        self.outra = Organizacao.objects.create(nome='Biblioteca B', slug='b')
+        livro = Livro.objects.create(organizacao=self.outra, titulo='Da B', isbn='9780000000099', ano_publicacao=2000)
+        self.exemplar_b = Exemplar.objects.create(organizacao=self.outra, livro=livro, codigo='B-1')
+        self.membro_b = Membro.objects.create(organizacao=self.outra, nome='Zeca', cpf='999.999.999-99',
+                                              email='z@x.com')
+
+    def criar(self, exemplar, membro, quantidade):
+        for _ in range(quantidade):
+            Emprestimo.objects.create(organizacao=exemplar.organizacao, exemplar=exemplar, membro=membro,
+                                      data_devolucao=self.hoje)
+
+    def test_total_do_dashboard_bate_com_a_consulta_feita_a_mao(self):
+        self.criar(self.exemplar, self.ana, 3)
+        self.criar(self.exemplar_b, self.membro_b, 5)
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT COUNT(*) FROM acervo_emprestimo WHERE organizacao_id = %s', [self.org.pk])
+            na_mao = cursor.fetchone()[0]
+        no_painel = self.client.get(reverse('dashboard')).context['metricas']['emprestimos']
+        self.assertEqual((no_painel, na_mao), (3, 3))
+
+    def test_dashboard_vazio_abre_sem_erro_mesmo_com_dados_em_outra_organizacao(self):
+        self.criar(self.exemplar_b, self.membro_b, 5)
+        resposta = self.client.get(reverse('dashboard'))
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.context['metricas']
+        for chave in ['emprestimos', 'abertos', 'leitores', 'devolucoes', 'multas_geradas', 'multas_pendentes']:
+            with self.subTest(chave=chave):
+                self.assertEqual(dados[chave], 0)
+        for chave in ['livros', 'membros', 'por_mes', 'grafico_mensal', 'reservas_por_status']:
+            with self.subTest(chave=chave):
+                self.assertEqual(dados[chave], [])
+        self.assertContains(resposta, 'Nenhum empréstimo no período.')
+        self.assertContains(resposta, 'Nenhuma reserva no período.')

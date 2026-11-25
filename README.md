@@ -1,14 +1,18 @@
-# Biblioteca / Acervo — P1
+# Biblioteca / Acervo
 
 Projeto da disciplina **Laboratório de Programação Full Stack** (Universidade de Vassouras).
 Opção 1 do catálogo: **Biblioteca / Acervo**, com empréstimos, fila de reserva e cálculo de multa.
+A P2 evoluiu o mesmo projeto para várias organizações, papéis de acesso, dashboard e API REST.
 
-**Stack:** Python + Django (templates, sem framework de front-end separado) + PostgreSQL.
+**Stack:** Python + Django (templates, sem framework de front-end separado) + Django REST Framework
++ PostgreSQL. O gráfico usa Chart.js, copiado para dentro do projeto.
 
 ## Entidades
 
 | Model | O que representa |
 |---|---|
+| `Organizacao` | cada biblioteca; todos os dados abaixo pertencem a uma |
+| `Perfil` | liga o usuário a uma organização e define o papel |
 | `Autor` | quem escreveu os livros |
 | `Livro` | o título (ISBN, editora, ano); tem vários autores |
 | `Exemplar` | cada cópia física de um livro, com código de tombo |
@@ -101,6 +105,13 @@ para retirada. O **dashboard** (`/dashboard/`) mostra o movimento de um período
 | A procura está subindo ou caindo? | série no tempo | gráfico de empréstimos por mês (Chart.js) |
 | O que aconteceu com as reservas? | distribuição | reservas por status |
 
+## Conferência do dashboard (Aula 17)
+
+Em 25/11/2026, no banco de desenvolvimento, os empréstimos feitos, os ainda em aberto e os
+leitores ativos do período padrão foram comparados, em cada organização, com uma consulta SQL
+escrita à mão: os valores foram iguais. Os testes automatizados cobrem totais, isolamento entre
+organizações, filtro por período, série, distribuição, painel vazio e o que o operador não pode ver.
+
 ## Roteiro de isolamento (Aula 14)
 
 Duas organizações, A e B, com um usuário logado em A. Executado em 25/11/2026 por testes
@@ -176,20 +187,25 @@ ponha `LOG_SQL=True` no `.env` (só em desenvolvimento).
 python manage.py test acervo
 ```
 
-Cobrem multa, bloqueios de empréstimo, ordem da fila, expiração/cancelamento de reserva e as telas principais.
+Cobrem as regras da biblioteca (multa, bloqueios e fila), as telas, o isolamento entre organizações,
+os papéis, a API, o dashboard, o CSV e o número de consultas das listagens.
 
 ## Estrutura
 
 ```
 biblioteca/          configurações do projeto (settings, urls)
 acervo/
-  models.py          as 6 entidades
+  models.py          organização, perfil e as 6 entidades do acervo
   regras.py          regras de empréstimo, multa e fila de reserva
-  forms.py           ModelForms
-  views.py           uma view por tela (lista, detalhe, novo, editar, excluir...)
-  urls.py            rotas do app (criado à mão, o startapp não gera)
-  templates/acervo/  base.html + telas (herança de templates)
-  static/acervo/     estilo.css
-  management/        comando popular_dados
+  permissoes.py      o que cada papel pode fazer, nas telas e na API
+  validadores.py     ISBN e CPF, usados por formulários e API
+  metricas.py        consultas do dashboard
+  relatorios.py      exportação em CSV
+  forms.py           ModelForms e filtro por período
+  views.py, urls.py  telas e rotas
+  serializers.py, api_views.py, api_urls.py   API REST
+  templates/         telas (herança a partir de base.html)
+  static/acervo/     estilo.css e js/ (gráfico)
+  management/        comandos popular_dados e preparar_demo
   tests.py
 ```
