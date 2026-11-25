@@ -47,6 +47,18 @@ def serie_mensal(emprestimos):
     )
 
 
+def dados_do_grafico(serie, inicio, fim):
+    """A série pronta para o JavaScript: mês como "MM/AAAA" e meses sem movimento com zero."""
+    if not serie:
+        return []
+    totais = {(linha['mes'].year, linha['mes'].month): linha['total'] for linha in serie}
+    # Conta os meses em sequência (ano * 12 + mês) para atravessar a virada do ano
+    primeiro = inicio.year * 12 + inicio.month - 1
+    ultimo = fim.year * 12 + fim.month - 1
+    meses = (divmod(numero, 12) for numero in range(primeiro, ultimo + 1))
+    return [{'mes': f'{mes + 1:02d}/{ano}', 'total': totais.get((ano, mes + 1), 0)} for ano, mes in meses]
+
+
 def distribuicao_reservas(reservas):
     """Quantas reservas há em cada status."""
     nomes = dict(Reserva.STATUS_CHOICES)
@@ -61,11 +73,14 @@ def do_periodo(organizacao, inicio, fim):
     devolvidos = emprestimos.filter(data_devolucao__range=periodo)
     reservas = Reserva.objects.filter(organizacao=organizacao, data_reserva__date__range=periodo)
 
+    por_mes = serie_mensal(feitos)
+
     return {
         **kpis(feitos, devolvidos),
         # Agrupa pela chave, e não só pelo nome: dois livros homônimos não se somam
         'livros': ranking(feitos, 'exemplar__livro', 'exemplar__livro__titulo'),
         'membros': ranking(feitos, 'membro', 'membro__nome'),
-        'por_mes': serie_mensal(feitos),
+        'por_mes': por_mes,
+        'grafico_mensal': dados_do_grafico(por_mes, inicio, fim),
         'reservas_por_status': distribuicao_reservas(reservas),
     }

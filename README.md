@@ -91,14 +91,14 @@ Acesse http://127.0.0.1:8000 (sistema) e http://127.0.0.1:8000/admin (Django Adm
 
 A tela inicial mostra o que pede ação hoje: totais do acervo, empréstimos em atraso e reservas
 para retirada. O **dashboard** (`/dashboard/`) mostra o movimento de um período (padrão: últimos
-30 dias) e responde a quatro perguntas de quem administra a biblioteca, com as consultas em
+6 meses) e responde a quatro perguntas de quem administra a biblioteca, com as consultas em
 [`acervo/metricas.py`](acervo/metricas.py):
 
 | Pergunta da semana | Tipo | Onde aparece |
 |---|---|---|
 | Quanto a biblioteca movimentou e quanto há de multa a receber? | total (KPI) | cartões |
 | Quais livros mais saem, e quem mais pega? | ranking | top 5 de livros e de membros |
-| A procura está subindo ou caindo? | série no tempo | empréstimos por mês |
+| A procura está subindo ou caindo? | série no tempo | gráfico de empréstimos por mês (Chart.js) |
 | O que aconteceu com as reservas? | distribuição | reservas por status |
 
 ## Roteiro de isolamento (Aula 14)

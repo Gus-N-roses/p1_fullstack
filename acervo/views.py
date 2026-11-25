@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
@@ -24,9 +24,11 @@ def org_atual(request):
 
 
 def _periodo(request):
-    """O período escolhido no painel; sem escolha (ou inválida), os últimos 30 dias."""
+    """O período escolhido no dashboard; sem escolha (ou inválida), os últimos 6 meses."""
     hoje = timezone.localdate()
-    padrao = {'de': hoje - timedelta(days=29), 'ate': hoje}
+    # Do dia 1º de cinco meses atrás até hoje: seis meses no gráfico, contando o atual
+    ano, mes = divmod(hoje.year * 12 + hoje.month - 1 - 5, 12)
+    padrao = {'de': date(ano, mes + 1, 1), 'ate': hoje}
     if 'de' not in request.GET and 'ate' not in request.GET:
         return PeriodoForm(initial=padrao), padrao
     form = PeriodoForm(request.GET)

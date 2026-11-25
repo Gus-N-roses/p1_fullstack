@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from importlib import import_module
 from io import StringIO
@@ -645,10 +645,10 @@ class PainelTeste(BaseTeste):
 
     def test_filtro_por_periodo(self):
         self.emprestimo(self.ana, self.exemplar, 1)
-        self.emprestimo(self.bruno, self.outro_exemplar, 60)
-        self.assertEqual(self.painel().context['metricas']['emprestimos'], 1)  # padrão: 30 dias
+        self.emprestimo(self.bruno, self.outro_exemplar, 250)
+        self.assertEqual(self.painel().context['metricas']['emprestimos'], 1)  # padrão: 6 meses
 
-        antigo = self.hoje - timedelta(days=60)
+        antigo = self.hoje - timedelta(days=250)
         dados = self.painel(de=antigo.isoformat(), ate=antigo.isoformat()).context['metricas']
         self.assertEqual([i['membro__nome'] for i in dados['membros']], ['Bruno'])
 
@@ -689,6 +689,30 @@ class PainelTeste(BaseTeste):
                                       data_emprestimo=data, data_devolucao=data)
         dados = self.painel(de=mes_passado.isoformat(), ate=self.hoje.isoformat()).context['metricas']
         self.assertEqual([(i['mes'], i['total']) for i in dados['por_mes']], [(mes_passado, 2), (este_mes, 1)])
+
+    def test_grafico_recebe_meses_formatados_e_preenche_os_vazios(self):
+        for data in [date(2025, 11, 10), date(2026, 1, 5), date(2026, 1, 20)]:
+            Emprestimo.objects.create(organizacao=self.org, membro=self.ana, exemplar=self.exemplar,
+                                      data_emprestimo=data, data_devolucao=data)
+        resposta = self.painel(de='2025-11-01', ate='2026-02-28')
+        self.assertEqual(resposta.context['metricas']['grafico_mensal'], [
+            {'mes': '11/2025', 'total': 1}, {'mes': '12/2025', 'total': 0},
+            {'mes': '01/2026', 'total': 2}, {'mes': '02/2026', 'total': 0},
+        ])
+        self.assertContains(resposta, '<script id="dados-mes" type="application/json">')
+        self.assertContains(resposta, 'id="grafico-mensal"')
+        self.assertContains(resposta, 'acervo/js/dashboard.js')
+
+    def test_periodo_padrao_comeca_no_dia_primeiro_de_cinco_meses_atras(self):
+        periodo = self.painel().context['periodo']
+        meses = (periodo['ate'].year - periodo['de'].year) * 12 + periodo['ate'].month - periodo['de'].month
+        self.assertEqual((periodo['de'].day, meses, periodo['ate']), (1, 5, self.hoje))
+
+    def test_sem_dados_nao_cria_o_grafico(self):
+        resposta = self.painel()
+        self.assertEqual(resposta.context['metricas']['grafico_mensal'], [])
+        self.assertNotContains(resposta, 'id="grafico-mensal"')
+        self.assertContains(resposta, 'Nenhum empréstimo no período.')
 
     def test_distribuicao_de_reservas_por_status(self):
         for membro, status in [(self.ana, Reserva.AGUARDANDO), (self.bruno, Reserva.AGUARDANDO),
