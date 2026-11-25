@@ -4,6 +4,7 @@ from io import StringIO
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -667,3 +668,58 @@ class PainelTeste(BaseTeste):
         self.assertEqual(resposta.context['metricas']['emprestimos'], 0)
         self.assertEqual(resposta.context['metricas']['multas_geradas'], Decimal('0.00'))
         self.assertNotContains(resposta, 'Zeca')
+
+
+class UnicidadePorOrganizacaoTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        self.autor = Autor.objects.get()
+        outra = Organizacao.objects.create(nome='Outra Biblioteca', slug='outra')
+        livro = Livro.objects.create(organizacao=outra, titulo='De Fora', isbn='9780000000099', ano_publicacao=2000)
+        Exemplar.objects.create(organizacao=outra, livro=livro, codigo='FORA-1')
+        Membro.objects.create(organizacao=outra, nome='Zeca', cpf='999.999.999-99', email='zeca@exemplo.com')
+
+    def casos(self, isbn, codigo, cpf, email):
+        """(tela, rota da API, model, dados) de cada cadastro com campo único."""
+        return [
+            ('novo_livro', 'api_livros', Livro,
+             {'titulo': 'Novo', 'autores': [self.autor.pk], 'isbn': isbn, 'ano_publicacao': 2000}),
+            ('novo_exemplar', 'api_exemplares', Exemplar,
+             {'livro': self.livro.pk, 'codigo': codigo, 'data_aquisicao': self.hoje.isoformat(), 'ativo': True}),
+            ('novo_membro', 'api_membros', Membro, {'nome': 'Novo', 'cpf': cpf, 'email': email, 'ativo': True}),
+        ]
+
+    def test_tela_aceita_valores_usados_por_outra_organizacao(self):
+        for tela, _, model, dados in self.casos('9780000000099', 'FORA-1', '99999999999', 'zeca@exemplo.com'):
+            with self.subTest(tela=tela):
+                antes = model.objects.filter(organizacao=self.org).count()
+                self.assertEqual(self.client.post(reverse(tela), dados).status_code, 302)
+                self.assertEqual(model.objects.filter(organizacao=self.org).count(), antes + 1)
+
+    def test_api_aceita_valores_usados_por_outra_organizacao(self):
+        for _, rota, _, dados in self.casos('9780000000099', 'FORA-1', '99999999999', 'zeca@exemplo.com'):
+            with self.subTest(rota=rota):
+                resposta = self.client.post(reverse(rota), dados, content_type='application/json')
+                self.assertEqual(resposta.status_code, 201, resposta.content)
+
+    def test_repetido_na_mesma_organizacao_e_recusado_na_tela_e_na_api(self):
+        repetidos = self.casos('978-85-359-1066-3', 'DC-001', '11111111111', 'ana@exemplo.com')
+        esperados = [['isbn'], ['codigo'], ['cpf', 'email']]
+        for (tela, rota, model, dados), campos in zip(repetidos, esperados):
+            with self.subTest(rota=rota):
+                antes = model.objects.count()
+                resposta = self.client.post(reverse(tela), dados)
+                self.assertEqual(sorted(resposta.context['form'].errors), campos)
+                resposta = self.client.post(reverse(rota), dados, content_type='application/json')
+                self.assertEqual((resposta.status_code, sorted(resposta.json())), (400, campos))
+                self.assertEqual(model.objects.count(), antes)
+
+    def test_editar_mantendo_o_proprio_valor_e_permitido(self):
+        dados = {'nome': 'Ana Maria', 'cpf': self.ana.cpf, 'email': self.ana.email, 'ativo': True}
+        self.assertEqual(self.client.post(reverse('editar_membro', args=[self.ana.pk]), dados).status_code, 302)
+        resposta = self.client.put(reverse('api_membro', args=[self.ana.pk]), dados, content_type='application/json')
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+
+    def test_banco_tambem_recusa_repetido(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Livro.objects.create(organizacao=self.org, titulo='X', isbn=self.livro.isbn, ano_publicacao=2000)

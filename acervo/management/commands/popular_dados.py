@@ -19,14 +19,14 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **opcoes):
-        if Livro.objects.exists():
-            self.stdout.write(self.style.WARNING('O banco já tem livros; nada foi feito.'))
-            return
-
         try:
             org = Organizacao.objects.get(slug=opcoes['organizacao'])
         except Organizacao.DoesNotExist:
             raise CommandError(f'Não existe organização com o slug "{opcoes["organizacao"]}".')
+
+        if Livro.objects.filter(organizacao=org).exists():
+            self.stdout.write(self.style.WARNING(f'{org} já tem livros; nada foi feito.'))
+            return
 
         hoje = timezone.localdate()
         machado = Autor.objects.create(organizacao=org, nome='Machado de Assis', nacionalidade='Brasileira')

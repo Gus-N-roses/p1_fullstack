@@ -1,5 +1,4 @@
 from rest_framework import serializers
-from rest_framework.validators import UniqueValidator
 
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
 from .validadores import normalizar_cpf, normalizar_isbn
@@ -20,7 +19,24 @@ class CPFField(serializers.CharField):
 
 
 class DaOrganizacaoSerializer(serializers.ModelSerializer):
-    """Campos relacionados só aceitam registros da organização do usuário."""
+    """Relacionamentos e unicidade valem dentro da organização do usuário."""
+    campos_unicos = {}  # campo -> mensagem de erro
+
+    def get_unique_together_validators(self):
+        # O validador automático exigiria `organizacao` nos dados: quem confere é o validate()
+        return []
+
+    def validate(self, dados):
+        outros = self.Meta.model.objects.filter(organizacao=self.context['organizacao'])
+        if self.instance:
+            outros = outros.exclude(pk=self.instance.pk)
+        erros = {
+            campo: mensagem for campo, mensagem in self.campos_unicos.items()
+            if campo in dados and outros.filter(**{campo: dados[campo]}).exists()
+        }
+        if erros:
+            raise serializers.ValidationError(erros)
+        return dados
 
     def get_fields(self):
         campos = super().get_fields()
@@ -38,10 +54,8 @@ class AutorSerializer(DaOrganizacaoSerializer):
 
 
 class LivroSerializer(DaOrganizacaoSerializer):
-    isbn = ISBNField(
-        max_length=17,
-        validators=[UniqueValidator(queryset=Livro.objects.all(), message='Já existe um livro com este ISBN.')],
-    )
+    isbn = ISBNField(max_length=17)
+    campos_unicos = {'isbn': 'Já existe um livro com este ISBN.'}
 
     class Meta:
         model = Livro
@@ -50,6 +64,7 @@ class LivroSerializer(DaOrganizacaoSerializer):
 
 class ExemplarSerializer(DaOrganizacaoSerializer):
     situacao = serializers.CharField(read_only=True)
+    campos_unicos = {'codigo': 'Já existe um exemplar com este código de tombo.'}
 
     class Meta:
         model = Exemplar
@@ -57,10 +72,11 @@ class ExemplarSerializer(DaOrganizacaoSerializer):
 
 
 class MembroSerializer(DaOrganizacaoSerializer):
-    cpf = CPFField(
-        max_length=14,
-        validators=[UniqueValidator(queryset=Membro.objects.all(), message='Já existe um membro com este CPF.')],
-    )
+    cpf = CPFField(max_length=14)
+    campos_unicos = {
+        'cpf': 'Já existe um membro com este CPF.',
+        'email': 'Já existe um membro com este e-mail.',
+    }
 
     class Meta:
         model = Membro

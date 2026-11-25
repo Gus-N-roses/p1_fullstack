@@ -41,6 +41,11 @@ class Perfil(models.Model):
         return self.papel == self.ADMIN
 
 
+def unico_por_organizacao(campo, nome):
+    """O valor não se repete dentro de uma organização, mas outra pode usá-lo."""
+    return models.UniqueConstraint(fields=['organizacao', campo], name=nome)
+
+
 class OrganizacaoBase(models.Model):
     """Base abstrata: toda entidade do acervo pertence a uma organização."""
     organizacao = models.ForeignKey(Organizacao, on_delete=models.CASCADE)
@@ -65,13 +70,14 @@ class Autor(OrganizacaoBase):
 class Livro(OrganizacaoBase):
     titulo = models.CharField('título', max_length=200)
     autores = models.ManyToManyField(Autor, related_name='livros')
-    isbn = models.CharField('ISBN', max_length=17, unique=True)
+    isbn = models.CharField('ISBN', max_length=17)
     editora = models.CharField(max_length=100, blank=True)
     ano_publicacao = models.PositiveIntegerField('ano de publicação')
     sinopse = models.TextField(blank=True)
 
     class Meta:
         ordering = ['titulo']
+        constraints = [unico_por_organizacao('isbn', 'isbn_unico_por_org')]
 
     def __str__(self):
         return self.titulo
@@ -111,7 +117,7 @@ class ExemplarQuerySet(models.QuerySet):
 
 class Exemplar(OrganizacaoBase):
     livro = models.ForeignKey(Livro, on_delete=models.CASCADE, related_name='exemplares')
-    codigo = models.CharField('código de tombo', max_length=30, unique=True)
+    codigo = models.CharField('código de tombo', max_length=30)
     data_aquisicao = models.DateField('data de aquisição', default=timezone.localdate)
     ativo = models.BooleanField(
         'em circulação', default=True,
@@ -123,6 +129,7 @@ class Exemplar(OrganizacaoBase):
     class Meta:
         ordering = ['livro__titulo', 'codigo']
         verbose_name_plural = 'exemplares'
+        constraints = [unico_por_organizacao('codigo', 'codigo_unico_por_org')]
 
     def __str__(self):
         return f'{self.codigo} — {self.livro.titulo}'
@@ -143,14 +150,18 @@ class Exemplar(OrganizacaoBase):
 
 class Membro(OrganizacaoBase):
     nome = models.CharField(max_length=150)
-    cpf = models.CharField('CPF', max_length=14, unique=True)
-    email = models.EmailField('e-mail', unique=True)
+    cpf = models.CharField('CPF', max_length=14)
+    email = models.EmailField('e-mail')
     telefone = models.CharField(max_length=20, blank=True)
     data_cadastro = models.DateField('data de cadastro', auto_now_add=True)
     ativo = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['nome']
+        constraints = [
+            unico_por_organizacao('cpf', 'cpf_unico_por_org'),
+            unico_por_organizacao('email', 'email_unico_por_org'),
+        ]
 
     def __str__(self):
         return self.nome

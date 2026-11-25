@@ -11,6 +11,27 @@ class DataInput(forms.DateInput):
         super().__init__(format='%Y-%m-%d', **kwargs)
 
 
+class SemDuplicadoForm(forms.ModelForm):
+    """Recusa valores já usados na organização.
+
+    Como `organizacao` fica fora do formulário, o Django não confere sozinho a
+    UniqueConstraint e o duplicado só estouraria no banco (IntegrityError).
+    """
+    campos_unicos = {}  # campo -> mensagem de erro
+
+    def __init__(self, *args, organizacao=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.organizacao = organizacao
+
+    def clean(self):
+        dados = super().clean()
+        outros = self._meta.model.objects.filter(organizacao=self.organizacao).exclude(pk=self.instance.pk)
+        for campo, mensagem in self.campos_unicos.items():
+            if dados.get(campo) and outros.filter(**{campo: dados[campo]}).exists():
+                self.add_error(campo, mensagem)
+        return dados
+
+
 class AutorForm(forms.ModelForm):
     class Meta:
         model = Autor
@@ -21,7 +42,9 @@ class AutorForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
 
-class LivroForm(forms.ModelForm):
+class LivroForm(SemDuplicadoForm):
+    campos_unicos = {'isbn': 'Já existe um livro com este ISBN.'}
+
     class Meta:
         model = Livro
         fields = ['titulo', 'autores', 'isbn', 'editora', 'ano_publicacao', 'sinopse']
@@ -31,31 +54,38 @@ class LivroForm(forms.ModelForm):
         }
 
     def __init__(self, *args, organizacao=None, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, organizacao=organizacao, **kwargs)
         self.fields['autores'].queryset = Autor.objects.filter(organizacao=organizacao)
 
     def clean_isbn(self):
         return normalizar_isbn(self.cleaned_data['isbn'])
 
 
-class ExemplarForm(forms.ModelForm):
+class ExemplarForm(SemDuplicadoForm):
+    campos_unicos = {'codigo': 'Já existe um exemplar com este código de tombo.'}
+
     class Meta:
         model = Exemplar
         fields = ['livro', 'codigo', 'data_aquisicao', 'ativo']
         widgets = {'data_aquisicao': DataInput()}
 
     def __init__(self, *args, organizacao=None, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, organizacao=organizacao, **kwargs)
         self.fields['livro'].queryset = Livro.objects.filter(organizacao=organizacao)
 
 
-class MembroForm(forms.ModelForm):
+class MembroForm(SemDuplicadoForm):
+    campos_unicos = {
+        'cpf': 'Já existe um membro com este CPF.',
+        'email': 'Já existe um membro com este e-mail.',
+    }
+
     class Meta:
         model = Membro
         fields = ['nome', 'cpf', 'email', 'telefone', 'ativo']
 
     def __init__(self, *args, organizacao=None, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, organizacao=organizacao, **kwargs)
 
     def clean_cpf(self):
         return normalizar_cpf(self.cleaned_data['cpf'])
