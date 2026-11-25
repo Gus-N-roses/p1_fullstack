@@ -89,6 +89,14 @@ class Livro(OrganizacaoBase):
     def nomes_autores(self):
         return ', '.join(autor.nome for autor in self.autores.all())
 
+    def total_exemplares(self):
+        """Para listagens com prefetch de exemplares: não consulta o banco de novo."""
+        return len(self.exemplares.all())
+
+    def total_disponiveis(self):
+        """Mesma ressalva: use com prefetch de Exemplar.objects.com_situacao()."""
+        return sum(exemplar.esta_disponivel for exemplar in self.exemplares.all())
+
     def exemplares_disponiveis(self):
         """Exemplares ativos e sem empréstimo em aberto."""
         return Exemplar.objects.disponiveis().filter(livro=self)
@@ -115,6 +123,13 @@ class ExemplarQuerySet(models.QuerySet):
         em_aberto = Emprestimo.objects.filter(data_devolucao__isnull=True).values('exemplar')
         return self.filter(ativo=True).exclude(pk__in=em_aberto)
 
+    def com_situacao(self):
+        """Para listagens: carrega os empréstimos em aberto de todos em uma consulta só."""
+        em_aberto = Emprestimo.objects.filter(data_devolucao__isnull=True)
+        return self.prefetch_related(
+            models.Prefetch('emprestimos', queryset=em_aberto, to_attr='em_aberto_carregados'),
+        )
+
 
 class Exemplar(OrganizacaoBase):
     livro = models.ForeignKey(Livro, on_delete=models.CASCADE, related_name='exemplares')
@@ -136,6 +151,9 @@ class Exemplar(OrganizacaoBase):
         return f'{self.codigo} — {self.livro.titulo}'
 
     def emprestimo_atual(self):
+        # Veio de com_situacao()? Usa o que já está na memória
+        if hasattr(self, 'em_aberto_carregados'):
+            return next(iter(self.em_aberto_carregados), None)
         return self.emprestimos.filter(data_devolucao__isnull=True).first()
 
     @property
@@ -202,6 +220,8 @@ class Emprestimo(OrganizacaoBase):
     class Meta:
         ordering = ['-data_emprestimo', '-pk']
         verbose_name = 'empréstimo'
+        # Dashboard e CSV filtram sempre por organização e data do empréstimo
+        indexes = [models.Index(fields=['organizacao', 'data_emprestimo'], name='emprestimo_org_data')]
         constraints = [
             # Um exemplar não pode ter dois empréstimos em aberto ao mesmo tempo
             models.UniqueConstraint(
@@ -269,4 +289,7 @@ class Reserva(OrganizacaoBase):
     def posicao_na_fila(self):
         if not self.ativa:
             return None
+        # Preenchida por regras.carregar_posicoes() nas listagens
+        if hasattr(self, 'posicao_carregada'):
+            return self.posicao_carregada
         return list(self.livro.reservas_ativas().values_list('pk', flat=True)).index(self.pk) + 1

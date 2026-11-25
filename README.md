@@ -163,6 +163,13 @@ No navegador, entre pelo próprio sistema ou por `/api-auth/login/`. No terminal
 curl -u SEU_USUARIO http://127.0.0.1:8000/api/livros/   # o curl pede a senha
 ```
 
+## Desempenho
+
+As listagens carregam os relacionamentos em lote (`select_related`, `prefetch_related` e
+`Exemplar.objects.com_situacao()`), e testes com `assertNumQueries` falham se o número de
+consultas voltar a crescer com a quantidade de registros. Para ver o SQL enquanto navega,
+ponha `LOG_SQL=True` no `.env` (só em desenvolvimento).
+
 ## Testes
 
 ```bash

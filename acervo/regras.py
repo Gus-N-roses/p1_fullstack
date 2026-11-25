@@ -2,6 +2,7 @@
 
 As views chamam estas funções; toda a lógica fica aqui, não nos templates.
 """
+from collections import Counter
 from datetime import timedelta
 
 from django.conf import settings
@@ -119,6 +120,21 @@ def processar_fila(livro):
         reserva.data_limite_retirada = data_limite
         reserva.save(update_fields=['status', 'data_limite_retirada'])
     return proximos
+
+
+def carregar_posicoes(reservas, organizacao):
+    """Calcula a posição na fila de várias reservas com uma única consulta."""
+    ativas = Reserva.objects.filter(
+        organizacao=organizacao, status__in=[Reserva.AGUARDANDO, Reserva.DISPONIVEL],
+    ).order_by('data_reserva', 'pk').values_list('pk', 'livro_id')
+    tamanho_da_fila, posicoes = Counter(), {}
+    for pk, livro_id in ativas:
+        tamanho_da_fila[livro_id] += 1
+        posicoes[pk] = tamanho_da_fila[livro_id]
+    for reserva in reservas:
+        if reserva.pk in posicoes:
+            reserva.posicao_carregada = posicoes[reserva.pk]
+    return reservas
 
 
 def expirar_reservas_vencidas(organizacao):

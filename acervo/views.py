@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.db.models import Count, ProtectedError, Q
+from django.db.models import Count, Prefetch, ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django.utils import timezone
@@ -157,7 +157,9 @@ def lista_livros(request):
     livro_tem_exemplar_disponivel = Q(exemplares__pk__in=Exemplar.objects.disponiveis().values('pk'))
 
     org = org_atual(request)
-    livros = Livro.objects.filter(organizacao=org).prefetch_related('autores', 'exemplares__emprestimos')
+    livros = Livro.objects.filter(organizacao=org).prefetch_related(
+        'autores', Prefetch('exemplares', queryset=Exemplar.objects.com_situacao()),
+    )
     if busca:
         # As duas partes da busca (texto) e do filtro (status) ficam na MESMA consulta:
         # o Q() de texto é ANDado ao Q() de disponibilidade dentro do mesmo queryset,
@@ -181,7 +183,7 @@ def livro_detalhe(request, pk):
     livro = get_object_or_404(Livro, pk=pk, organizacao=org_atual(request))
     contexto = {
         'livro': livro,
-        'exemplares': livro.exemplares.all(),
+        'exemplares': livro.exemplares.com_situacao().select_related('livro'),
         'fila': livro.reservas_ativas().select_related('membro'),
         'quantidade_livre': livro.quantidade_livre(),
     }
@@ -212,9 +214,7 @@ def excluir_livro(request, pk):
 # ---------------------------------------------------------------------------
 
 def lista_exemplares(request):
-    exemplares = Exemplar.objects.filter(organizacao=org_atual(request)).select_related(
-        'livro',
-    ).prefetch_related('emprestimos')
+    exemplares = Exemplar.objects.filter(organizacao=org_atual(request)).select_related('livro').com_situacao()
     return render(request, 'acervo/exemplares/lista.html', {'exemplares': exemplares})
 
 
@@ -394,7 +394,7 @@ def lista_reservas(request):
     if not mostrar_todas:
         reservas = reservas.filter(status__in=[Reserva.AGUARDANDO, Reserva.DISPONIVEL])
     return render(request, 'acervo/reservas/lista.html', {
-        'reservas': reservas, 'mostrar_todas': mostrar_todas,
+        'reservas': regras.carregar_posicoes(reservas, org), 'mostrar_todas': mostrar_todas,
     })
 
 

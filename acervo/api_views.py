@@ -75,12 +75,12 @@ class LivroDetail(CatalogoMixin, generics.RetrieveUpdateDestroyAPIView):
 
 
 class ExemplarListCreate(CatalogoMixin, generics.ListCreateAPIView):
-    queryset = Exemplar.objects.select_related('livro')
+    queryset = Exemplar.objects.com_situacao()
     serializer_class = ExemplarSerializer
 
 
 class ExemplarDetail(CatalogoMixin, generics.RetrieveUpdateDestroyAPIView):
-    queryset = Exemplar.objects.select_related('livro')
+    queryset = Exemplar.objects.com_situacao()
     serializer_class = ExemplarSerializer
 
 

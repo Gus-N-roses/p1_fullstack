@@ -131,6 +131,14 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Log de SQL no terminal, para caçar N+1. Só em desenvolvimento: LOG_SQL=True no .env
+if DEBUG and os.getenv('LOG_SQL') == 'True':
+    LOGGING = {
+        'version': 1,
+        'handlers': {'console': {'class': 'logging.StreamHandler'}},
+        'loggers': {'django.db.backends': {'handlers': ['console'], 'level': 'DEBUG'}},
+    }
+
 # Autenticação
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'inicio'

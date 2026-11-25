@@ -29,7 +29,7 @@
         <td><a href="{{ livro.get_absolute_url }}">{{ livro.titulo }}</a></td>
         <td>{{ livro.nomes_autores|default:"—" }}</td>
         <td>{{ livro.ano_publicacao }}</td>
-        <td>{{ livro.exemplares_disponiveis.count }} de {{ livro.exemplares.count }}</td>
+        <td>{{ livro.total_disponiveis }} de {{ livro.total_exemplares }}</td>
         <td class="acoes">
           {% if user.perfil.eh_admin %}
             <a href="{% url 'editar_livro' livro.pk %}">Editar</a>

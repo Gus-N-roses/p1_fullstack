@@ -8,9 +8,10 @@ from django.apps import apps
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 from django.core.management import CommandError, call_command
-from django.db import IntegrityError, transaction
-from django.db.models import ProtectedError
+from django.db import IntegrityError, connection, transaction
+from django.db.models import Prefetch, ProtectedError
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -1070,3 +1071,56 @@ class ApiDashboardTeste(BaseTeste):
 
     def test_browsable_api_renderiza(self):
         self.assertEqual(self.client.get(self.url, HTTP_ACCEPT='text/html').status_code, 200)
+
+
+class ConsultasTeste(BaseTeste):
+    """Trava o N+1: com mais registros, cada página faz o mesmo número de consultas."""
+
+    def criar_registros(self, quantidade):
+        for _ in range(quantidade):
+            n = Exemplar.objects.count() + 100
+            livro = Livro.objects.create(organizacao=self.org, titulo=f'Livro {n}', isbn=f'{n:013d}',
+                                         ano_publicacao=2000)
+            livro.autores.add(Autor.objects.create(organizacao=self.org, nome=f'Autor {n}'))
+            membro = Membro.objects.create(organizacao=self.org, nome=f'M{n}', cpf=str(n), email=f'm{n}@x.com')
+            # um exemplar no livro novo e outro no livro de sempre, para o detalhe dele crescer
+            for alvo, codigo in [(livro, f'A{n}'), (self.livro, f'B{n}')]:
+                exemplar = Exemplar.objects.create(organizacao=self.org, livro=alvo, codigo=codigo)
+                Emprestimo.objects.create(organizacao=self.org, exemplar=exemplar, membro=membro)
+            Reserva.objects.create(organizacao=self.org, livro=self.livro, membro=membro)
+
+    def contar(self, url):
+        with CaptureQueriesContext(connection) as contexto:
+            self.assertEqual(self.client.get(url).status_code, 200)
+        return len(contexto)
+
+    def test_consultas_nao_crescem_com_os_registros(self):
+        urls = [reverse(nome) for nome in [
+            'inicio', 'dashboard', 'exportar_csv', 'lista_livros', 'lista_autores', 'lista_exemplares',
+            'lista_membros', 'lista_emprestimos', 'lista_reservas', 'api_livros', 'api_autores',
+            'api_exemplares', 'api_membros', 'api_emprestimos', 'api_reservas', 'api_dashboard',
+        ]]
+        urls += [reverse('livro_detalhe', args=[self.livro.pk]), reverse('membro_detalhe', args=[self.ana.pk])]
+        self.criar_registros(2)
+        antes = {url: self.contar(url) for url in urls}
+        self.criar_registros(8)
+        for url, consultas in antes.items():
+            with self.subTest(url=url), self.assertNumQueries(consultas):
+                self.client.get(url)
+
+    def test_dados_em_lote_batem_com_a_consulta_individual(self):
+        regras.realizar_emprestimo(self.ana, self.exemplar)
+        Exemplar.objects.create(organizacao=self.org, livro=self.livro, codigo='LIVRE')
+        Exemplar.objects.create(organizacao=self.org, livro=self.livro, codigo='FORA', ativo=False)
+        for lote in Exemplar.objects.com_situacao():
+            self.assertEqual(lote.situacao, Exemplar.objects.get(pk=lote.pk).situacao)
+
+        livro = Livro.objects.prefetch_related(Prefetch('exemplares', Exemplar.objects.com_situacao())).get()
+        self.assertEqual((livro.total_disponiveis(), livro.total_exemplares()), (1, 3))
+
+        reservas = [Reserva.objects.create(organizacao=self.org, livro=self.livro, membro=membro, status=status)
+                    for membro, status in [(self.bruno, Reserva.CANCELADA), (self.carla, Reserva.AGUARDANDO),
+                                           (self.ana, Reserva.AGUARDANDO)]]
+        carregadas = regras.carregar_posicoes(list(Reserva.objects.order_by('pk')), self.org)
+        self.assertEqual([r.posicao_na_fila() for r in carregadas], [None, 1, 2])
+        self.assertEqual([Reserva.objects.get(pk=r.pk).posicao_na_fila() for r in reservas], [None, 1, 2])
