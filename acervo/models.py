@@ -10,6 +10,7 @@ from django.utils import timezone
 class Organizacao(models.Model):
     nome = models.CharField(max_length=150)
     slug = models.SlugField(max_length=150, unique=True)
+    criada_em = models.DateTimeField('criada em', auto_now_add=True)
 
     class Meta:
         ordering = ['nome']

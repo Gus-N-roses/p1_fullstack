@@ -809,3 +809,11 @@ class RoteiroDeIsolamentoTeste(BaseTeste):
     def test_5_isbn_de_b_pode_ser_cadastrado_em_a(self):
         self.assertEqual(self.criar_livro(self.livro_b.isbn).status_code, 302)
         self.assertTrue(Livro.objects.filter(organizacao=self.org, isbn=self.livro_b.isbn).exists())
+
+
+class OrganizacaoCriadaEmTeste(TestCase):
+    def test_data_de_criacao_e_preenchida_automaticamente(self):
+        antes = timezone.now()
+        organizacao = Organizacao.objects.create(nome='Nova', slug='nova')
+        self.assertTrue(antes <= organizacao.criada_em <= timezone.now())
+        self.assertFalse(Organizacao.objects.filter(criada_em__isnull=True).exists())
