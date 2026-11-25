@@ -37,6 +37,8 @@ a { color: var(--vinho-claro); }
 .topo nav { display: flex; flex-wrap: wrap; gap: 1rem; }
 .topo nav a { color: var(--dourado); text-decoration: none; }
 .topo nav a:hover { text-decoration: underline; }
+.topo nav button.link { color: var(--dourado); }
+.topo nav button.link:hover { background: none; }
 
 .conteudo { flex: 1; width: 100%; max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem; }
 .rodape { text-align: center; padding: 1rem; color: #7a6d66; font-size: .85rem; }

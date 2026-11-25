@@ -10,6 +10,7 @@
 <body>
   <header class="topo">
     <a class="marca" href="{% url 'inicio' %}">Biblioteca de Vassouras</a>
+    {% if user.is_authenticated %}
     <nav>
       <a href="{% url 'inicio' %}">Início</a>
       <a href="{% url 'lista_livros' %}">Livros</a>
@@ -19,7 +20,12 @@
       <a href="{% url 'lista_emprestimos' %}">Empréstimos</a>
       <a href="{% url 'lista_reservas' %}">Reservas</a>
       <a href="{% url 'admin:index' %}">Admin</a>
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="link">Sair ({{ user.username }})</button>
+      </form>
     </nav>
+    {% endif %}
   </header>
 
   <main class="conteudo">

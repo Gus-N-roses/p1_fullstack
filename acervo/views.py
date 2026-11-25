@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -11,21 +12,30 @@ from .forms import (
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
 
 
+def org_atual(request):
+    """A organização do usuário logado: toda consulta e gravação é restrita a ela."""
+    perfil = getattr(request.user, 'perfil', None)
+    if perfil is None:
+        raise PermissionDenied('Seu usuário não está vinculado a nenhuma organização.')
+    return perfil.organizacao
+
+
 def inicio(request):
+    org = org_atual(request)
     hoje = timezone.localdate()
-    emprestimos_abertos = Emprestimo.objects.filter(data_devolucao__isnull=True)
+    emprestimos_abertos = Emprestimo.objects.filter(organizacao=org, data_devolucao__isnull=True)
     atrasados = emprestimos_abertos.filter(data_prevista_devolucao__lt=hoje).select_related(
         'membro', 'exemplar__livro',
     )
     contexto = {
-        'total_livros': Livro.objects.count(),
-        'total_exemplares': Exemplar.objects.filter(ativo=True).count(),
-        'total_membros': Membro.objects.filter(ativo=True).count(),
+        'total_livros': Livro.objects.filter(organizacao=org).count(),
+        'total_exemplares': Exemplar.objects.filter(organizacao=org, ativo=True).count(),
+        'total_membros': Membro.objects.filter(organizacao=org, ativo=True).count(),
         'total_emprestimos_abertos': emprestimos_abertos.count(),
         'atrasados': atrasados,
-        'reservas_para_retirada': Reserva.objects.filter(status=Reserva.DISPONIVEL).select_related(
-            'membro', 'livro',
-        ),
+        'reservas_para_retirada': Reserva.objects.filter(
+            organizacao=org, status=Reserva.DISPONIVEL,
+        ).select_related('membro', 'livro'),
     }
     return render(request, 'acervo/inicio.html', contexto)
 
@@ -34,15 +44,19 @@ def inicio(request):
 # Auxiliares: o mesmo fluxo GET mostra / POST salva serve para vários cadastros
 # ---------------------------------------------------------------------------
 
-def _formulario(request, classe_form, titulo, destino, instancia=None, mensagem='Registro salvo.', inicial=None):
+def _formulario(request, classe_form, titulo, destino, organizacao, instancia=None, mensagem='Registro salvo.', inicial=None):
     if request.method == 'POST':
-        form = classe_form(request.POST, instance=instancia)
+        form = classe_form(request.POST, instance=instancia, organizacao=organizacao)
         if form.is_valid():
-            objeto = form.save()
+            objeto = form.save(commit=False)
+            objeto.organizacao = organizacao
+            objeto.save()
+            if hasattr(form, 'save_m2m'):
+                form.save_m2m()
             messages.success(request, mensagem)
             return redirect(destino(objeto) if callable(destino) else destino)
     else:
-        form = classe_form(instance=instancia, initial=inicial)
+        form = classe_form(instance=instancia, initial=inicial, organizacao=organizacao)
     return render(request, 'acervo/form.html', {'form': form, 'titulo': titulo, 'voltar': request.GET.get('voltar')})
 
 
@@ -63,21 +77,23 @@ def _excluir(request, objeto, destino, cancelar):
 # ---------------------------------------------------------------------------
 
 def lista_autores(request):
-    autores = Autor.objects.annotate(quantidade_livros=Count('livros'))
+    autores = Autor.objects.filter(organizacao=org_atual(request)).annotate(quantidade_livros=Count('livros'))
     return render(request, 'acervo/autores/lista.html', {'autores': autores})
 
 
 def novo_autor(request):
-    return _formulario(request, AutorForm, 'Novo autor', 'lista_autores', mensagem='Autor cadastrado.')
+    return _formulario(request, AutorForm, 'Novo autor', 'lista_autores', org_atual(request),
+                       mensagem='Autor cadastrado.')
 
 
 def editar_autor(request, pk):
-    autor = get_object_or_404(Autor, pk=pk)
-    return _formulario(request, AutorForm, f'Editar {autor}', 'lista_autores', autor, 'Autor atualizado.')
+    autor = get_object_or_404(Autor, pk=pk, organizacao=org_atual(request))
+    return _formulario(request, AutorForm, f'Editar {autor}', 'lista_autores', org_atual(request),
+                       autor, 'Autor atualizado.')
 
 
 def excluir_autor(request, pk):
-    autor = get_object_or_404(Autor, pk=pk)
+    autor = get_object_or_404(Autor, pk=pk, organizacao=org_atual(request))
     return _excluir(request, autor, 'lista_autores', 'lista_autores')
 
 
@@ -101,7 +117,8 @@ def lista_livros(request):
     # negação por dentro, e o Django resolve certo dos dois lados.
     livro_tem_exemplar_disponivel = Q(exemplares__pk__in=Exemplar.objects.disponiveis().values('pk'))
 
-    livros = Livro.objects.prefetch_related('autores', 'exemplares__emprestimos')
+    org = org_atual(request)
+    livros = Livro.objects.filter(organizacao=org).prefetch_related('autores', 'exemplares__emprestimos')
     if busca:
         # As duas partes da busca (texto) e do filtro (status) ficam na MESMA consulta:
         # o Q() de texto é ANDado ao Q() de disponibilidade dentro do mesmo queryset,
@@ -122,7 +139,7 @@ def lista_livros(request):
 
 
 def livro_detalhe(request, pk):
-    livro = get_object_or_404(Livro, pk=pk)
+    livro = get_object_or_404(Livro, pk=pk, organizacao=org_atual(request))
     contexto = {
         'livro': livro,
         'exemplares': livro.exemplares.all(),
@@ -134,17 +151,17 @@ def livro_detalhe(request, pk):
 
 def novo_livro(request):
     return _formulario(request, LivroForm, 'Novo livro', lambda livro: livro.get_absolute_url(),
-                       mensagem='Livro cadastrado. Agora cadastre os exemplares.')
+                       org_atual(request), mensagem='Livro cadastrado. Agora cadastre os exemplares.')
 
 
 def editar_livro(request, pk):
-    livro = get_object_or_404(Livro, pk=pk)
+    livro = get_object_or_404(Livro, pk=pk, organizacao=org_atual(request))
     return _formulario(request, LivroForm, f'Editar {livro}', lambda l: l.get_absolute_url(),
-                       livro, 'Livro atualizado.')
+                       org_atual(request), livro, 'Livro atualizado.')
 
 
 def excluir_livro(request, pk):
-    livro = get_object_or_404(Livro, pk=pk)
+    livro = get_object_or_404(Livro, pk=pk, organizacao=org_atual(request))
     return _excluir(request, livro, 'lista_livros', livro.get_absolute_url())
 
 
@@ -153,24 +170,27 @@ def excluir_livro(request, pk):
 # ---------------------------------------------------------------------------
 
 def lista_exemplares(request):
-    exemplares = Exemplar.objects.select_related('livro').prefetch_related('emprestimos')
+    exemplares = Exemplar.objects.filter(organizacao=org_atual(request)).select_related(
+        'livro',
+    ).prefetch_related('emprestimos')
     return render(request, 'acervo/exemplares/lista.html', {'exemplares': exemplares})
 
 
 def novo_exemplar(request):
     # Vindo da página do livro (?livro=ID), o livro já aparece selecionado
     return _formulario(request, ExemplarForm, 'Novo exemplar', lambda e: e.livro.get_absolute_url(),
-                       mensagem='Exemplar cadastrado.', inicial={'livro': request.GET.get('livro')})
+                       org_atual(request), mensagem='Exemplar cadastrado.',
+                       inicial={'livro': request.GET.get('livro')})
 
 
 def editar_exemplar(request, pk):
-    exemplar = get_object_or_404(Exemplar, pk=pk)
+    exemplar = get_object_or_404(Exemplar, pk=pk, organizacao=org_atual(request))
     return _formulario(request, ExemplarForm, f'Editar exemplar {exemplar.codigo}',
-                       lambda e: e.livro.get_absolute_url(), exemplar, 'Exemplar atualizado.')
+                       lambda e: e.livro.get_absolute_url(), org_atual(request), exemplar, 'Exemplar atualizado.')
 
 
 def excluir_exemplar(request, pk):
-    exemplar = get_object_or_404(Exemplar, pk=pk)
+    exemplar = get_object_or_404(Exemplar, pk=pk, organizacao=org_atual(request))
     return _excluir(request, exemplar, exemplar.livro.get_absolute_url(), 'lista_exemplares')
 
 
@@ -180,14 +200,14 @@ def excluir_exemplar(request, pk):
 
 def lista_membros(request):
     busca = request.GET.get('q', '').strip()
-    membros = Membro.objects.all()
+    membros = Membro.objects.filter(organizacao=org_atual(request))
     if busca:
         membros = membros.filter(Q(nome__icontains=busca) | Q(cpf__icontains=busca) | Q(email__icontains=busca))
     return render(request, 'acervo/membros/lista.html', {'membros': membros, 'busca': busca})
 
 
 def membro_detalhe(request, pk):
-    membro = get_object_or_404(Membro, pk=pk)
+    membro = get_object_or_404(Membro, pk=pk, organizacao=org_atual(request))
     emprestimos = membro.emprestimos.select_related('exemplar__livro')
     contexto = {
         'membro': membro,
@@ -201,17 +221,17 @@ def membro_detalhe(request, pk):
 
 def novo_membro(request):
     return _formulario(request, MembroForm, 'Novo membro', lambda m: m.get_absolute_url(),
-                       mensagem='Membro cadastrado.')
+                       org_atual(request), mensagem='Membro cadastrado.')
 
 
 def editar_membro(request, pk):
-    membro = get_object_or_404(Membro, pk=pk)
+    membro = get_object_or_404(Membro, pk=pk, organizacao=org_atual(request))
     return _formulario(request, MembroForm, f'Editar {membro}', lambda m: m.get_absolute_url(),
-                       membro, 'Membro atualizado.')
+                       org_atual(request), membro, 'Membro atualizado.')
 
 
 def excluir_membro(request, pk):
-    membro = get_object_or_404(Membro, pk=pk)
+    membro = get_object_or_404(Membro, pk=pk, organizacao=org_atual(request))
     return _excluir(request, membro, 'lista_membros', membro.get_absolute_url())
 
 
@@ -232,9 +252,9 @@ def lista_emprestimos(request):
     filtro = request.GET.get('filtro', 'abertos')
     if filtro not in FILTROS_EMPRESTIMO:
         filtro = 'abertos'
-    emprestimos = Emprestimo.objects.filter(FILTROS_EMPRESTIMO[filtro][1]).select_related(
-        'membro', 'exemplar__livro',
-    )
+    emprestimos = Emprestimo.objects.filter(
+        FILTROS_EMPRESTIMO[filtro][1], organizacao=org_atual(request),
+    ).select_related('membro', 'exemplar__livro')
     if filtro == 'atrasados':
         emprestimos = emprestimos.filter(data_prevista_devolucao__lt=timezone.localdate())
     filtros = [(chave, rotulo) for chave, (rotulo, _) in FILTROS_EMPRESTIMO.items()]
@@ -244,8 +264,9 @@ def lista_emprestimos(request):
 
 
 def novo_emprestimo(request):
+    org = org_atual(request)
     if request.method == 'POST':
-        form = EmprestimoForm(request.POST)
+        form = EmprestimoForm(request.POST, organizacao=org)
         if form.is_valid():
             try:
                 emprestimo = regras.realizar_emprestimo(
@@ -262,7 +283,7 @@ def novo_emprestimo(request):
                 )
                 return redirect('lista_emprestimos')
     else:
-        form = EmprestimoForm(initial={
+        form = EmprestimoForm(organizacao=org, initial={
             'membro': request.GET.get('membro'),
             'exemplar': request.GET.get('exemplar'),
         })
@@ -270,7 +291,9 @@ def novo_emprestimo(request):
 
 
 def devolver_emprestimo(request, pk):
-    emprestimo = get_object_or_404(Emprestimo.objects.select_related('membro', 'exemplar__livro'), pk=pk)
+    emprestimo = get_object_or_404(
+        Emprestimo.objects.select_related('membro', 'exemplar__livro'), pk=pk, organizacao=org_atual(request),
+    )
     if not emprestimo.em_aberto:
         messages.warning(request, 'Este empréstimo já foi devolvido.')
         return redirect('lista_emprestimos')
@@ -301,7 +324,7 @@ def devolver_emprestimo(request, pk):
 
 @require_POST
 def pagar_multa(request, pk):
-    emprestimo = get_object_or_404(Emprestimo, pk=pk)
+    emprestimo = get_object_or_404(Emprestimo, pk=pk, organizacao=org_atual(request))
     try:
         regras.pagar_multa(emprestimo)
     except regras.RegraNegocioErro as erro:
@@ -316,8 +339,10 @@ def pagar_multa(request, pk):
 # ---------------------------------------------------------------------------
 
 def lista_reservas(request):
+    org = org_atual(request)
     # Vence as retiradas fora do prazo e passa a vez para o próximo da fila
     livros_vencidos = Livro.objects.filter(
+        organizacao=org,
         reservas__status=Reserva.DISPONIVEL,
         reservas__data_limite_retirada__lt=timezone.localdate(),
     ).distinct()
@@ -325,7 +350,9 @@ def lista_reservas(request):
         regras.processar_fila(livro)
 
     mostrar_todas = request.GET.get('todas') == '1'
-    reservas = Reserva.objects.select_related('livro', 'membro').order_by('livro__titulo', 'data_reserva', 'pk')
+    reservas = Reserva.objects.filter(organizacao=org).select_related('livro', 'membro').order_by(
+        'livro__titulo', 'data_reserva', 'pk',
+    )
     if not mostrar_todas:
         reservas = reservas.filter(status__in=[Reserva.AGUARDANDO, Reserva.DISPONIVEL])
     return render(request, 'acervo/reservas/lista.html', {
@@ -334,8 +361,9 @@ def lista_reservas(request):
 
 
 def nova_reserva(request):
+    org = org_atual(request)
     if request.method == 'POST':
-        form = ReservaForm(request.POST)
+        form = ReservaForm(request.POST, organizacao=org)
         if form.is_valid():
             try:
                 reserva = regras.criar_reserva(form.cleaned_data['membro'], form.cleaned_data['livro'])
@@ -348,13 +376,14 @@ def nova_reserva(request):
                 )
                 return redirect(reserva.livro.get_absolute_url())
     else:
-        form = ReservaForm(initial={'livro': request.GET.get('livro'), 'membro': request.GET.get('membro')})
+        form = ReservaForm(organizacao=org,
+                           initial={'livro': request.GET.get('livro'), 'membro': request.GET.get('membro')})
     return render(request, 'acervo/form.html', {'form': form, 'titulo': 'Nova reserva'})
 
 
 @require_POST
 def cancelar_reserva(request, pk):
-    reserva = get_object_or_404(Reserva, pk=pk)
+    reserva = get_object_or_404(Reserva, pk=pk, organizacao=org_atual(request))
     try:
         regras.cancelar_reserva(reserva)
     except regras.RegraNegocioErro as erro:

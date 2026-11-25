@@ -52,10 +52,15 @@ cp .env.example .env              # e preencha DB_PASSWORD, SECRET_KEY...
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py popular_dados    # opcional: livros, membros, um atraso e uma fila
+                                  # (na Biblioteca Central; troque com --organizacao <slug>)
 
 # 5. servidor
 python manage.py runserver
 ```
+
+Todas as telas exigem login, e cada usuário só vê os dados da própria organização.
+Um usuário novo (inclusive o do `createsuperuser`) precisa de um **Perfil** ligado a uma
+organização, definido no Admin, na edição do usuário.
 
 Acesse http://127.0.0.1:8000 (sistema) e http://127.0.0.1:8000/admin (Django Admin).
 

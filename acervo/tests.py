@@ -1,12 +1,15 @@
 from datetime import timedelta
 from decimal import Decimal
+from io import StringIO
 
+from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from . import regras
-from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
+from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Organizacao, Perfil, Reserva
 
 
 @override_settings(PRAZO_EMPRESTIMO_DIAS=14, VALOR_MULTA_DIARIA='2.00',
@@ -14,13 +17,17 @@ from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
 class BaseTeste(TestCase):
     def setUp(self):
         self.hoje = timezone.localdate()
-        autor = Autor.objects.create(nome='Machado de Assis')
-        self.livro = Livro.objects.create(titulo='Dom Casmurro', isbn='9788535910663', ano_publicacao=1899)
+        self.org = Organizacao.objects.create(nome='Biblioteca de Teste', slug='teste')
+        self.usuario = User.objects.create_user('atendente')
+        Perfil.objects.create(usuario=self.usuario, organizacao=self.org)
+        self.client.force_login(self.usuario)
+        autor = Autor.objects.create(organizacao=self.org, nome='Machado de Assis')
+        self.livro = Livro.objects.create(organizacao=self.org, titulo='Dom Casmurro', isbn='9788535910663', ano_publicacao=1899)
         self.livro.autores.add(autor)
-        self.exemplar = Exemplar.objects.create(livro=self.livro, codigo='DC-001')
-        self.ana = Membro.objects.create(nome='Ana', cpf='111.111.111-11', email='ana@exemplo.com')
-        self.bruno = Membro.objects.create(nome='Bruno', cpf='222.222.222-22', email='bruno@exemplo.com')
-        self.carla = Membro.objects.create(nome='Carla', cpf='333.333.333-33', email='carla@exemplo.com')
+        self.exemplar = Exemplar.objects.create(organizacao=self.org, livro=self.livro, codigo='DC-001')
+        self.ana = Membro.objects.create(organizacao=self.org, nome='Ana', cpf='111.111.111-11', email='ana@exemplo.com')
+        self.bruno = Membro.objects.create(organizacao=self.org, nome='Bruno', cpf='222.222.222-22', email='bruno@exemplo.com')
+        self.carla = Membro.objects.create(organizacao=self.org, nome='Carla', cpf='333.333.333-33', email='carla@exemplo.com')
 
 
 class MultaTeste(BaseTeste):
@@ -32,7 +39,7 @@ class MultaTeste(BaseTeste):
 
     def test_devolucao_atrasada_cobra_por_dia(self):
         emprestimo = Emprestimo.objects.create(
-            membro=self.ana, exemplar=self.exemplar,
+            organizacao=self.org, membro=self.ana, exemplar=self.exemplar,
             data_emprestimo=self.hoje - timedelta(days=20),
             data_prevista_devolucao=self.hoje - timedelta(days=5),
         )
@@ -43,7 +50,7 @@ class MultaTeste(BaseTeste):
 
     def test_multa_pendente_bloqueia_novo_emprestimo(self):
         Emprestimo.objects.create(
-            membro=self.ana, exemplar=self.exemplar,
+            organizacao=self.org, membro=self.ana, exemplar=self.exemplar,
             data_emprestimo=self.hoje - timedelta(days=20),
             data_prevista_devolucao=self.hoje - timedelta(days=2),
             data_devolucao=self.hoje, multa=Decimal('4.00'),
@@ -55,9 +62,9 @@ class MultaTeste(BaseTeste):
         self.assertIsNotNone(regras.realizar_emprestimo(self.ana, self.exemplar).pk)
 
     def test_emprestimo_atrasado_bloqueia_novo_emprestimo(self):
-        outro = Exemplar.objects.create(livro=self.livro, codigo='DC-002')
+        outro = Exemplar.objects.create(organizacao=self.org, livro=self.livro, codigo='DC-002')
         Emprestimo.objects.create(
-            membro=self.ana, exemplar=self.exemplar,
+            organizacao=self.org, membro=self.ana, exemplar=self.exemplar,
             data_emprestimo=self.hoje - timedelta(days=20),
             data_prevista_devolucao=self.hoje - timedelta(days=1),
         )
@@ -73,7 +80,7 @@ class EmprestimoTeste(BaseTeste):
 
     @override_settings(LIMITE_EMPRESTIMOS_POR_MEMBRO=1)
     def test_limite_de_emprestimos(self):
-        outro = Exemplar.objects.create(livro=self.livro, codigo='DC-002')
+        outro = Exemplar.objects.create(organizacao=self.org, livro=self.livro, codigo='DC-002')
         regras.realizar_emprestimo(self.ana, self.exemplar)
         with self.assertRaisesMessage(regras.RegraNegocioErro, 'limite'):
             regras.realizar_emprestimo(self.ana, outro)
@@ -187,10 +194,10 @@ class BuscaEFiltroLivrosTeste(BaseTeste):
         # Criamos um segundo livro e o deixamos totalmente emprestado.
         self.autor = Autor.objects.get()
         self.livro_emprestado = Livro.objects.create(
-            titulo='Memórias Póstumas de Brás Cubas', isbn='9788535910664', ano_publicacao=1881,
+            organizacao=self.org, titulo='Memórias Póstumas de Brás Cubas', isbn='9788535910664', ano_publicacao=1881,
         )
         self.livro_emprestado.autores.add(self.autor)
-        exemplar_emprestado = Exemplar.objects.create(livro=self.livro_emprestado, codigo='MP-001')
+        exemplar_emprestado = Exemplar.objects.create(organizacao=self.org, livro=self.livro_emprestado, codigo='MP-001')
         regras.realizar_emprestimo(self.ana, exemplar_emprestado)
 
     def test_busca_por_titulo_filtra_lista(self):
@@ -230,10 +237,10 @@ class BuscaEFiltroLivrosTeste(BaseTeste):
         Django: encadear dois .filter()/.exclude() separados sobre `exemplares` deixaria
         cada condição casar com um exemplar diferente do mesmo livro.
         """
-        livro_misto = Livro.objects.create(titulo='Livro Misto', isbn='9780000000000', ano_publicacao=2000)
+        livro_misto = Livro.objects.create(organizacao=self.org, titulo='Livro Misto', isbn='9780000000000', ano_publicacao=2000)
         livro_misto.autores.add(self.autor)
-        exemplar_emprestado = Exemplar.objects.create(livro=livro_misto, codigo='LM-001', ativo=True)
-        Exemplar.objects.create(livro=livro_misto, codigo='LM-002', ativo=False)  # inativo, nunca emprestado
+        exemplar_emprestado = Exemplar.objects.create(organizacao=self.org, livro=livro_misto, codigo='LM-001', ativo=True)
+        Exemplar.objects.create(organizacao=self.org, livro=livro_misto, codigo='LM-002', ativo=False)  # inativo, nunca emprestado
         regras.realizar_emprestimo(self.bruno, exemplar_emprestado)
 
         resposta = self.client.get(reverse('lista_livros'), {'status': 'disponivel'})
@@ -254,11 +261,11 @@ class BuscaEFiltroLivrosTeste(BaseTeste):
         antes deste teste: a versão ingênua retorna 0 aqui; a correta retorna 1.
         """
         livro_parcial = Livro.objects.create(
-            titulo='Livro Parcialmente Emprestado', isbn='9780000000001', ano_publicacao=2001,
+            organizacao=self.org, titulo='Livro Parcialmente Emprestado', isbn='9780000000001', ano_publicacao=2001,
         )
         livro_parcial.autores.add(self.autor)
-        Exemplar.objects.create(livro=livro_parcial, codigo='LP-001', ativo=True)  # disponível
-        exemplar_emprestado = Exemplar.objects.create(livro=livro_parcial, codigo='LP-002', ativo=True)
+        Exemplar.objects.create(organizacao=self.org, livro=livro_parcial, codigo='LP-001', ativo=True)  # disponível
+        exemplar_emprestado = Exemplar.objects.create(organizacao=self.org, livro=livro_parcial, codigo='LP-002', ativo=True)
         regras.realizar_emprestimo(self.bruno, exemplar_emprestado)
 
         resposta = self.client.get(reverse('lista_livros'), {'status': 'disponivel'})
@@ -273,12 +280,12 @@ class ValidacaoDeAtrasoNoFormularioTeste(BaseTeste):
 
     def test_membro_com_atraso_nao_consegue_pegar_outro_livro_pelo_formulario(self):
         Emprestimo.objects.create(
-            membro=self.ana, exemplar=self.exemplar,
+            organizacao=self.org, membro=self.ana, exemplar=self.exemplar,
             data_emprestimo=self.hoje - timedelta(days=20),
             data_prevista_devolucao=self.hoje - timedelta(days=1),
         )
-        outro_livro = Livro.objects.create(titulo='1984', isbn='9788535914849', ano_publicacao=1949)
-        outro_exemplar = Exemplar.objects.create(livro=outro_livro, codigo='1984-001')
+        outro_livro = Livro.objects.create(organizacao=self.org, titulo='1984', isbn='9788535914849', ano_publicacao=1949)
+        outro_exemplar = Exemplar.objects.create(organizacao=self.org, livro=outro_livro, codigo='1984-001')
 
         resposta = self.client.post(reverse('novo_emprestimo'), {
             'membro': self.ana.pk, 'exemplar': outro_exemplar.pk,
@@ -287,3 +294,53 @@ class ValidacaoDeAtrasoNoFormularioTeste(BaseTeste):
         self.assertEqual(resposta.status_code, 200)  # form inválido: não redireciona
         self.assertContains(resposta, 'atraso')
         self.assertEqual(Emprestimo.objects.filter(membro=self.ana, exemplar=outro_exemplar).count(), 0)
+
+
+class AcessoEIsolamentoTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        outra = Organizacao.objects.create(nome='Outra Biblioteca', slug='outra')
+        self.autor_de_fora = Autor.objects.create(organizacao=outra, nome='Autor de Fora')
+        self.livro_de_fora = Livro.objects.create(
+            organizacao=outra, titulo='Livro de Fora', isbn='9780000000099', ano_publicacao=2000,
+        )
+
+    def test_visitante_e_mandado_para_o_login(self):
+        self.client.logout()
+        resposta = self.client.get(reverse('inicio'))
+        self.assertRedirects(resposta, f"{reverse('login')}?next={reverse('inicio')}")
+
+    def test_login_leva_ao_inicio(self):
+        self.client.logout()
+        self.usuario.set_password('senha-de-teste')
+        self.usuario.save()
+        resposta = self.client.post(reverse('login'), {'username': 'atendente', 'password': 'senha-de-teste'})
+        self.assertRedirects(resposta, reverse('inicio'))
+
+    def test_usuario_sem_perfil_recebe_403(self):
+        self.client.force_login(User.objects.create_user('sem_perfil'))
+        resposta = self.client.get(reverse('inicio'))
+        self.assertContains(resposta, 'nenhuma organização', status_code=403)
+
+    def test_registro_de_outra_organizacao_nao_aparece(self):
+        resposta = self.client.get(reverse('lista_livros'))
+        self.assertNotContains(resposta, 'Livro de Fora')
+        resposta = self.client.get(reverse('livro_detalhe', args=[self.livro_de_fora.pk]))
+        self.assertEqual(resposta.status_code, 404)
+
+    def test_formulario_de_livro_nao_aceita_autor_de_outra_organizacao(self):
+        self.assertNotContains(self.client.get(reverse('novo_livro')), 'Autor de Fora')
+        self.client.post(reverse('novo_livro'), {
+            'titulo': 'Invasor', 'autores': [self.autor_de_fora.pk], 'isbn': '9780000000098',
+            'ano_publicacao': 2000,
+        })
+        self.assertFalse(Livro.objects.filter(titulo='Invasor').exists())
+
+
+class PopularDadosTeste(TestCase):
+    def test_cadastra_tudo_na_organizacao_escolhida(self):
+        call_command('popular_dados', organizacao='biblioteca-norte', stdout=StringIO())
+        for model in (Autor, Livro, Exemplar, Membro, Emprestimo, Reserva):
+            with self.subTest(model=model.__name__):
+                self.assertTrue(model.objects.exists())
+                self.assertFalse(model.objects.exclude(organizacao__slug='biblioteca-norte').exists())

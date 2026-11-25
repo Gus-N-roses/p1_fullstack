@@ -16,6 +16,9 @@ class AutorForm(forms.ModelForm):
         fields = ['nome', 'nacionalidade', 'data_nascimento']
         widgets = {'data_nascimento': DataInput()}
 
+    def __init__(self, *args, organizacao=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
 
 class LivroForm(forms.ModelForm):
     class Meta:
@@ -25,6 +28,10 @@ class LivroForm(forms.ModelForm):
             'autores': forms.CheckboxSelectMultiple(),
             'sinopse': forms.Textarea(attrs={'rows': 4}),
         }
+
+    def __init__(self, *args, organizacao=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['autores'].queryset = Autor.objects.filter(organizacao=organizacao)
 
     def clean_isbn(self):
         # Guarda só dígitos (e X do ISBN-10), aceitando o usuário digitar com hífens
@@ -40,11 +47,18 @@ class ExemplarForm(forms.ModelForm):
         fields = ['livro', 'codigo', 'data_aquisicao', 'ativo']
         widgets = {'data_aquisicao': DataInput()}
 
+    def __init__(self, *args, organizacao=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['livro'].queryset = Livro.objects.filter(organizacao=organizacao)
+
 
 class MembroForm(forms.ModelForm):
     class Meta:
         model = Membro
         fields = ['nome', 'cpf', 'email', 'telefone', 'ativo']
+
+    def __init__(self, *args, organizacao=None, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def clean_cpf(self):
         cpf = ''.join(c for c in self.cleaned_data['cpf'] if c.isdigit())
@@ -64,10 +78,12 @@ class EmprestimoForm(forms.ModelForm):
             'data_prevista_devolucao': 'Deixe em branco para usar o prazo padrão.',
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, organizacao=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['membro'].queryset = Membro.objects.filter(ativo=True)
-        self.fields['exemplar'].queryset = Exemplar.objects.disponiveis().select_related('livro')
+        self.fields['membro'].queryset = Membro.objects.filter(organizacao=organizacao, ativo=True)
+        self.fields['exemplar'].queryset = Exemplar.objects.disponiveis().filter(
+            organizacao=organizacao,
+        ).select_related('livro')
         self.fields['data_prevista_devolucao'].required = False
 
     def clean_membro(self):
@@ -92,6 +108,7 @@ class ReservaForm(forms.ModelForm):
         model = Reserva
         fields = ['livro', 'membro']
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, organizacao=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['membro'].queryset = Membro.objects.filter(ativo=True)
+        self.fields['livro'].queryset = Livro.objects.filter(organizacao=organizacao)
+        self.fields['membro'].queryset = Membro.objects.filter(organizacao=organizacao, ativo=True)

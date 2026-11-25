@@ -49,7 +49,7 @@ def realizar_emprestimo(membro, exemplar, data_prevista_devolucao=None):
             f'Os exemplares de "{livro}" estão separados para quem está na fila de reserva.'
         )
 
-    emprestimo = Emprestimo(membro=membro, exemplar=exemplar)
+    emprestimo = Emprestimo(membro=membro, exemplar=exemplar, organizacao=exemplar.organizacao)
     if data_prevista_devolucao:
         if data_prevista_devolucao < timezone.localdate():
             raise RegraNegocioErro('A devolução prevista não pode ser no passado.')
@@ -137,7 +137,7 @@ def criar_reserva(membro, livro):
         raise RegraNegocioErro(
             f'Há exemplar de "{livro}" disponível agora — faça o empréstimo direto.'
         )
-    return Reserva.objects.create(membro=membro, livro=livro)
+    return Reserva.objects.create(membro=membro, livro=livro, organizacao=livro.organizacao)
 
 
 @transaction.atomic

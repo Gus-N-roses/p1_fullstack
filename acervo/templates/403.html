@@ -1,0 +1,8 @@
+{% extends 'acervo/base.html' %}
+
+{% block titulo %}Acesso negado{% endblock %}
+
+{% block conteudo %}
+<h1>Acesso negado</h1>
+<p>{{ exception|default:"Você não tem permissão para acessar esta página." }}</p>
+{% endblock %}
