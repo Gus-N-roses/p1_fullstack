@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
     'acervo',  # nosso app
 ]
 
@@ -134,6 +135,13 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'inicio'
 LOGOUT_REDIRECT_URL = 'login'
+
+# API: nada é público; sem login ela responde 403
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
 
 # Regras de negócio da biblioteca
 PRAZO_EMPRESTIMO_DIAS = int(os.getenv('PRAZO_EMPRESTIMO_DIAS', '14'))

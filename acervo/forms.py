@@ -1,6 +1,7 @@
 from django import forms
 
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
+from .validadores import normalizar_isbn
 
 
 class DataInput(forms.DateInput):
@@ -34,11 +35,7 @@ class LivroForm(forms.ModelForm):
         self.fields['autores'].queryset = Autor.objects.filter(organizacao=organizacao)
 
     def clean_isbn(self):
-        # Guarda só dígitos (e X do ISBN-10), aceitando o usuário digitar com hífens
-        isbn = self.cleaned_data['isbn'].replace('-', '').replace(' ', '').upper()
-        if len(isbn) not in (10, 13) or not isbn[:-1].isdigit():
-            raise forms.ValidationError('Informe um ISBN com 10 ou 13 dígitos.')
-        return isbn
+        return normalizar_isbn(self.cleaned_data['isbn'])
 
 
 class ExemplarForm(forms.ModelForm):

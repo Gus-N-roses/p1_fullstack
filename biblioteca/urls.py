@@ -6,5 +6,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('entrar/', auth_views.LoginView.as_view(template_name='acervo/login.html'), name='login'),
     path('sair/', auth_views.LogoutView.as_view(), name='logout'),
+    path('api/', include('acervo.api_urls')),
+    path('api-auth/', include('rest_framework.urls')),  # login da Browsable API
     path('', include('acervo.urls')),
 ]

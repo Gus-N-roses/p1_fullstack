@@ -344,3 +344,75 @@ class PopularDadosTeste(TestCase):
             with self.subTest(model=model.__name__):
                 self.assertTrue(model.objects.exists())
                 self.assertFalse(model.objects.exclude(organizacao__slug='biblioteca-norte').exists())
+
+
+class ApiLivrosTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        self.autor = Autor.objects.get()
+        outra = Organizacao.objects.create(nome='Outra Biblioteca', slug='outra')
+        self.autor_de_fora = Autor.objects.create(organizacao=outra, nome='Autor de Fora')
+        self.livro_de_fora = Livro.objects.create(
+            organizacao=outra, titulo='Livro de Fora', isbn='9780000000099', ano_publicacao=2000,
+        )
+        self.lista = reverse('api_livros')
+
+    def criar(self, **dados):
+        corpo = {'titulo': 'Novo', 'autores': [self.autor.pk], 'isbn': '9780000000011', 'ano_publicacao': 2000}
+        return self.client.post(self.lista, {**corpo, **dados}, content_type='application/json')
+
+    def detalhe(self, livro):
+        return reverse('api_livro', args=[livro.pk])
+
+    def test_sem_login_responde_403(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(self.lista).status_code, 403)
+        self.assertEqual(self.criar().status_code, 403)
+
+    def test_usuario_sem_perfil_responde_403(self):
+        self.client.force_login(User.objects.create_user('sem_perfil'))
+        self.assertEqual(self.client.get(self.lista).status_code, 403)
+
+    def test_lista_so_os_livros_da_organizacao(self):
+        resposta = self.client.get(self.lista)
+        self.assertEqual([livro['titulo'] for livro in resposta.json()], ['Dom Casmurro'])
+
+    def test_livro_de_outra_organizacao_responde_404(self):
+        url = self.detalhe(self.livro_de_fora)
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertEqual(self.client.delete(url).status_code, 404)
+        self.assertTrue(Livro.objects.filter(pk=self.livro_de_fora.pk).exists())
+
+    def test_cria_na_organizacao_do_usuario_com_isbn_normalizado(self):
+        resposta = self.criar(isbn='978-00-000-0001-1')
+        self.assertEqual(resposta.status_code, 201)
+        livro = Livro.objects.get(pk=resposta.json()['id'])
+        self.assertEqual((livro.organizacao, livro.isbn), (self.org, '9780000000011'))
+
+    def test_dados_invalidos_respondem_400(self):
+        self.assertIn('isbn', self.criar(isbn='123').json())
+        # mesmo ISBN do Dom Casmurro, só que com hífens
+        resposta = self.criar(isbn='978-85-359-1066-3')
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn('isbn', resposta.json())
+        resposta = self.criar(autores=[self.autor_de_fora.pk])
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn('autores', resposta.json())
+
+    def test_atualiza_e_apaga(self):
+        url = self.detalhe(self.livro)
+        resposta = self.client.patch(url, {'titulo': 'Outro título'}, content_type='application/json')
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(self.client.delete(url).status_code, 204)
+
+    def test_nao_apaga_livro_com_emprestimo(self):
+        regras.realizar_emprestimo(self.ana, self.exemplar)
+        self.assertEqual(self.client.delete(self.detalhe(self.livro)).status_code, 400)
+        self.assertTrue(Livro.objects.filter(pk=self.livro.pk).exists())
+
+    def test_browsable_api_renderiza_sem_autores_de_fora(self):
+        resposta = self.client.get(self.lista, HTTP_ACCEPT='text/html')
+        self.assertContains(resposta, 'Machado de Assis')
+        self.assertNotContains(resposta, 'Autor de Fora')
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse('rest_framework:login')).status_code, 200)

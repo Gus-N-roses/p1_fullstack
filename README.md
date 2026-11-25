@@ -64,6 +64,20 @@ organização, definido no Admin, na edição do usuário.
 
 Acesse http://127.0.0.1:8000 (sistema) e http://127.0.0.1:8000/admin (Django Admin).
 
+## API (Django REST Framework)
+
+| Verbo | Endereço | Ação |
+|---|---|---|
+| GET / POST | `/api/livros/` | listar / criar |
+| GET / PUT / PATCH / DELETE | `/api/livros/<id>/` | detalhar / atualizar / apagar |
+
+Exige login (sessão ou autenticação básica) e só enxerga os livros da organização do usuário.
+No navegador, entre pelo próprio sistema ou por `/api-auth/login/`. No terminal:
+
+```bash
+curl -u SEU_USUARIO http://127.0.0.1:8000/api/livros/   # o curl pede a senha
+```
+
 ## Testes
 
 ```bash
