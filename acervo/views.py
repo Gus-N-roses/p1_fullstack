@@ -350,14 +350,7 @@ def pagar_multa(request, pk):
 
 def lista_reservas(request):
     org = org_atual(request)
-    # Vence as retiradas fora do prazo e passa a vez para o próximo da fila
-    livros_vencidos = Livro.objects.filter(
-        organizacao=org,
-        reservas__status=Reserva.DISPONIVEL,
-        reservas__data_limite_retirada__lt=timezone.localdate(),
-    ).distinct()
-    for livro in livros_vencidos:
-        regras.processar_fila(livro)
+    regras.expirar_reservas_vencidas(org)
 
     mostrar_todas = request.GET.get('todas') == '1'
     reservas = Reserva.objects.filter(organizacao=org).select_related('livro', 'membro').order_by(

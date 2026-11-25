@@ -8,3 +8,11 @@ def normalizar_isbn(valor):
     if len(isbn) not in (10, 13) or not isbn[:-1].isdigit():
         raise ValidationError('Informe um ISBN com 10 ou 13 dígitos.')
     return isbn
+
+
+def normalizar_cpf(valor):
+    """Aceita o CPF com ou sem pontuação e devolve no formato 000.000.000-00."""
+    cpf = ''.join(c for c in valor if c.isdigit())
+    if len(cpf) != 11:
+        raise ValidationError('O CPF deve ter 11 dígitos.')
+    return f'{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}'

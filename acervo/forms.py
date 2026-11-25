@@ -1,7 +1,7 @@
 from django import forms
 
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
-from .validadores import normalizar_isbn
+from .validadores import normalizar_cpf, normalizar_isbn
 
 
 class DataInput(forms.DateInput):
@@ -58,10 +58,7 @@ class MembroForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
     def clean_cpf(self):
-        cpf = ''.join(c for c in self.cleaned_data['cpf'] if c.isdigit())
-        if len(cpf) != 11:
-            raise forms.ValidationError('O CPF deve ter 11 dígitos.')
-        return f'{cpf[:3]}.{cpf[3:6]}.{cpf[6:9]}-{cpf[9:]}'
+        return normalizar_cpf(self.cleaned_data['cpf'])
 
 
 class EmprestimoForm(forms.ModelForm):

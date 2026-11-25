@@ -76,12 +76,23 @@ O papel é definido no **Perfil** do usuário (padrão: operador) e vale nas tel
 
 ## API (Django REST Framework)
 
-| Verbo | Endereço | Ação |
+| Recurso | Lista e criação (GET, POST) | Um registro |
 |---|---|---|
-| GET / POST | `/api/livros/` | listar / criar |
-| GET / PUT / PATCH / DELETE | `/api/livros/<id>/` | detalhar / atualizar / apagar |
+| Autores | `/api/autores/` | `/api/autores/<id>/` (GET, PUT, PATCH, DELETE) |
+| Livros | `/api/livros/` | `/api/livros/<id>/` (GET, PUT, PATCH, DELETE) |
+| Exemplares | `/api/exemplares/` | `/api/exemplares/<id>/` (GET, PUT, PATCH, DELETE) |
+| Membros | `/api/membros/` | `/api/membros/<id>/` (GET, PUT, PATCH, DELETE) |
+| Empréstimos | `/api/emprestimos/` | `/api/emprestimos/<id>/` (GET) |
+| Reservas | `/api/reservas/` | `/api/reservas/<id>/` (GET) |
 
-Exige login (sessão ou autenticação básica) e só enxerga os livros da organização do usuário.
+Empréstimos e reservas não são editados nem apagados; mudam por ações (POST), que seguem
+as mesmas regras das telas:
+
+- `/api/emprestimos/<id>/devolver/` (aceita `data_devolucao`; em branco, hoje)
+- `/api/emprestimos/<id>/pagar-multa/`
+- `/api/reservas/<id>/cancelar/`
+
+Exige login (sessão ou autenticação básica) e só enxerga os dados da organização do usuário.
 No navegador, entre pelo próprio sistema ou por `/api-auth/login/`. No terminal:
 
 ```bash

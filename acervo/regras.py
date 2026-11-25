@@ -8,7 +8,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Emprestimo, Exemplar, Membro, Reserva
+from .models import Emprestimo, Exemplar, Livro, Membro, Reserva
 
 
 class RegraNegocioErro(Exception):
@@ -119,6 +119,17 @@ def processar_fila(livro):
         reserva.data_limite_retirada = data_limite
         reserva.save(update_fields=['status', 'data_limite_retirada'])
     return proximos
+
+
+def expirar_reservas_vencidas(organizacao):
+    """Vence as retiradas fora do prazo e passa a vez para o próximo da fila."""
+    vencidos = Livro.objects.filter(
+        organizacao=organizacao,
+        reservas__status=Reserva.DISPONIVEL,
+        reservas__data_limite_retirada__lt=timezone.localdate(),
+    ).distinct()
+    for livro in vencidos:
+        processar_fila(livro)
 
 
 @transaction.atomic

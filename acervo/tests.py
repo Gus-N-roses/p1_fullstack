@@ -471,3 +471,136 @@ class PapeisTeste(BaseTeste):
     def test_perfil_novo_nasce_operador(self):
         perfil = Perfil.objects.create(usuario=User.objects.create_user('novato'), organizacao=self.org)
         self.assertFalse(perfil.eh_admin)
+
+
+class ApiRecursosTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        self.autor = Autor.objects.get()
+        outra = Organizacao.objects.create(nome='Outra Biblioteca', slug='outra')
+        livro = Livro.objects.create(organizacao=outra, titulo='De Fora', isbn='9780000000099', ano_publicacao=2000)
+        self.de_fora = {
+            'autor': Autor.objects.create(organizacao=outra, nome='Autor de Fora'),
+            'livro': livro,
+            'exemplar': Exemplar.objects.create(organizacao=outra, livro=livro, codigo='FORA-1'),
+            'membro': Membro.objects.create(organizacao=outra, nome='Zeca', cpf='999.999.999-99', email='z@exemplo.com'),
+        }
+        self.de_fora['emprestimo'] = Emprestimo.objects.create(
+            organizacao=outra, membro=self.de_fora['membro'], exemplar=self.de_fora['exemplar'],
+        )
+        self.de_fora['reserva'] = Reserva.objects.create(organizacao=outra, livro=livro, membro=self.de_fora['membro'])
+
+    def enviar(self, rota, dados=None, pk=None):
+        url = reverse(rota, args=[pk] if pk else [])
+        return self.client.post(url, dados or {}, content_type='application/json')
+
+    def emprestar(self, membro=None, exemplar=None):
+        return self.enviar('api_emprestimos', {
+            'membro': (membro or self.ana).pk, 'exemplar': (exemplar or self.exemplar).pk,
+        })
+
+    def test_listas_so_trazem_a_organizacao_do_usuario(self):
+        for nome, rota in [('autor', 'api_autores'), ('livro', 'api_livros'), ('exemplar', 'api_exemplares'),
+                           ('membro', 'api_membros'), ('emprestimo', 'api_emprestimos'),
+                           ('reserva', 'api_reservas')]:
+            with self.subTest(recurso=nome):
+                resposta = self.client.get(reverse(rota))
+                self.assertEqual(resposta.status_code, 200)
+                self.assertNotIn(self.de_fora[nome].pk, [item['id'] for item in resposta.json()])
+                detalhe = reverse(f'api_{nome}', args=[self.de_fora[nome].pk])
+                self.assertEqual(self.client.get(detalhe).status_code, 404)
+
+    def test_acoes_em_registro_de_outra_organizacao_respondem_404(self):
+        for rota, nome in [('api_devolver', 'emprestimo'), ('api_pagar_multa', 'emprestimo'),
+                           ('api_cancelar_reserva', 'reserva')]:
+            with self.subTest(rota=rota):
+                self.assertEqual(self.enviar(rota, pk=self.de_fora[nome].pk).status_code, 404)
+
+    def test_nao_relaciona_registros_de_outra_organizacao(self):
+        self.assertIn('membro', self.emprestar(membro=self.de_fora['membro']).json())
+        self.assertIn('exemplar', self.emprestar(exemplar=self.de_fora['exemplar']).json())
+        resposta = self.enviar('api_exemplares', {'livro': self.de_fora['livro'].pk, 'codigo': 'X-1'})
+        self.assertIn('livro', resposta.json())
+
+    def test_cria_catalogo_e_membro_na_organizacao_do_usuario(self):
+        for rota, model, dados in [
+            ('api_autores', Autor, {'nome': 'Clarice'}),
+            ('api_exemplares', Exemplar, {'livro': self.livro.pk, 'codigo': 'DC-009'}),
+            ('api_membros', Membro, {'nome': 'Davi', 'cpf': '44444444444', 'email': 'davi@exemplo.com'}),
+        ]:
+            with self.subTest(rota=rota):
+                resposta = self.enviar(rota, dados)
+                self.assertEqual(resposta.status_code, 201, resposta.content)
+                self.assertEqual(model.objects.get(pk=resposta.json()['id']).organizacao, self.org)
+        self.assertEqual(Membro.objects.get(nome='Davi').cpf, '444.444.444-44')
+
+    def test_cpf_invalido_ou_repetido_responde_400(self):
+        for cpf in ['123', '11111111111']:  # o segundo é o da Ana, sem pontuação
+            with self.subTest(cpf=cpf):
+                resposta = self.enviar('api_membros', {'nome': 'X', 'cpf': cpf, 'email': 'x@exemplo.com'})
+                self.assertEqual(resposta.status_code, 400)
+                self.assertIn('cpf', resposta.json())
+
+    def test_emprestimo_devolucao_com_multa_e_pagamento(self):
+        resposta = self.emprestar()
+        self.assertEqual(resposta.status_code, 201, resposta.content)
+        emprestimo = Emprestimo.objects.get(pk=resposta.json()['id'])
+        self.assertEqual(emprestimo.organizacao, self.org)
+
+        data = (emprestimo.data_prevista_devolucao + timedelta(days=3)).isoformat()
+        resposta = self.enviar('api_devolver', {'data_devolucao': data}, pk=emprestimo.pk)
+        self.assertEqual((resposta.status_code, resposta.json()['multa']), (200, '6.00'))
+        self.assertEqual(self.enviar('api_devolver', pk=emprestimo.pk).status_code, 400)
+
+        # multa pendente bloqueia até o pagamento
+        self.assertIn('multas pendentes', self.emprestar().json()['detail'])
+        resposta = self.enviar('api_pagar_multa', pk=emprestimo.pk)
+        self.assertTrue(resposta.json()['multa_paga'])
+        self.assertEqual(self.emprestar().status_code, 201)
+
+    def test_regras_valem_na_api(self):
+        self.emprestar()
+        resposta = self.emprestar(membro=self.bruno)
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn('não está disponível', resposta.json()['detail'])
+
+    def test_reserva_e_cancelamento(self):
+        dados = {'livro': self.livro.pk, 'membro': self.bruno.pk}
+        self.assertIn('disponível agora', self.enviar('api_reservas', dados).json()['detail'])
+        self.emprestar()
+        resposta = self.enviar('api_reservas', dados)
+        self.assertEqual(resposta.status_code, 201, resposta.content)
+        resposta = self.enviar('api_cancelar_reserva', pk=resposta.json()['id'])
+        self.assertEqual(resposta.json()['status'], Reserva.CANCELADA)
+
+    def test_historico_nao_e_editado_nem_apagado(self):
+        pk = self.emprestar().json()['id']
+        url = reverse('api_emprestimo', args=[pk])
+        self.assertEqual(self.client.delete(url).status_code, 405)
+        self.assertEqual(self.client.patch(url, {}, content_type='application/json').status_code, 405)
+        for rota, objeto in [('api_membro', self.ana), ('api_exemplar', self.exemplar)]:
+            self.assertEqual(self.client.delete(reverse(rota, args=[objeto.pk])).status_code, 400)
+
+    def test_papeis(self):
+        Perfil.objects.filter(usuario=self.usuario).update(papel=Perfil.OPERADOR)
+        for rota in ['api_autores', 'api_livros', 'api_exemplares']:
+            with self.subTest(rota=rota):
+                self.assertEqual(self.client.get(reverse(rota)).status_code, 200)
+                self.assertEqual(self.enviar(rota).status_code, 403)
+        self.assertEqual(self.emprestar().status_code, 201)
+
+    def test_sem_login_nada_e_acessivel(self):
+        self.client.logout()
+        for rota in ['api_autores', 'api_livros', 'api_exemplares', 'api_membros', 'api_emprestimos',
+                     'api_reservas']:
+            with self.subTest(rota=rota):
+                self.assertEqual(self.client.get(reverse(rota)).status_code, 403)
+
+    def test_browsable_api_renderiza(self):
+        pk = self.emprestar().json()['id']
+        for url in [reverse('api_exemplares'), reverse('api_emprestimos'), reverse('api_reservas'),
+                    reverse('api_devolver', args=[pk])]:
+            with self.subTest(url=url):
+                resposta = self.client.get(url, HTTP_ACCEPT='text/html')
+                self.assertIn(resposta.status_code, (200, 405))  # ações só aceitam POST
+                self.assertNotContains(resposta, 'Zeca', status_code=resposta.status_code)
