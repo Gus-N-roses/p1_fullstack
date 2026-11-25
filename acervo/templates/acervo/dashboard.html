@@ -4,7 +4,12 @@
 {% block titulo %}Dashboard{% endblock %}
 
 {% block conteudo %}
-<h1>Dashboard</h1>
+<div class="cabecalho-pagina">
+  <h1>Dashboard</h1>
+  {% if pode_exportar %}
+    <a class="botao" href="{% url 'exportar_csv' %}?de={{ periodo.de|date:'Y-m-d' }}&amp;ate={{ periodo.ate|date:'Y-m-d' }}">Exportar CSV</a>
+  {% endif %}
+</div>
 <p>Movimento de {{ periodo.de|date:"d/m/Y" }} a {{ periodo.ate|date:"d/m/Y" }}</p>
 <form method="get" class="busca periodo">
   {{ form_periodo.de.label_tag }} {{ form_periodo.de }}

@@ -66,10 +66,15 @@ def distribuicao_reservas(reservas):
     return [{'status': nomes[linha['status']], 'total': linha['total']} for linha in linhas]
 
 
+def emprestimos_do_periodo(organizacao, inicio, fim):
+    """Os empréstimos feitos no período: base do dashboard e do relatório em CSV."""
+    return Emprestimo.objects.filter(organizacao=organizacao, data_emprestimo__range=(inicio, fim))
+
+
 def do_periodo(organizacao, inicio, fim):
     periodo = (inicio, fim)
     emprestimos = Emprestimo.objects.filter(organizacao=organizacao)
-    feitos = emprestimos.filter(data_emprestimo__range=periodo)
+    feitos = emprestimos_do_periodo(organizacao, inicio, fim)
     devolvidos = emprestimos.filter(data_devolucao__range=periodo)
     reservas = Reserva.objects.filter(organizacao=organizacao, data_reserva__date__range=periodo)
 

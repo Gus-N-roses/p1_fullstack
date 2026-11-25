@@ -19,7 +19,7 @@ def somente_admin(view):
     @wraps(view)
     def protegida(request, *args, **kwargs):
         if not eh_admin(request.user):
-            raise PermissionDenied('Apenas o administrador pode alterar o catálogo.')
+            raise PermissionDenied('Apenas o administrador pode fazer isso.')
         return view(request, *args, **kwargs)
     return protegida
 

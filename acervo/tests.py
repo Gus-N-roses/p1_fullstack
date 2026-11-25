@@ -1,3 +1,4 @@
+import csv
 from datetime import date, timedelta
 from decimal import Decimal
 from importlib import import_module
@@ -13,7 +14,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from . import regras
+from . import regras, relatorios
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Organizacao, Perfil, Reserva
 
 
@@ -957,3 +958,67 @@ class DashboardPorPapelTeste(BaseTeste):
         # nem no contexto da página
         self.assertNotIn('por_mes', resposta.context['metricas'])
         self.assertNotIn('grafico_mensal', resposta.context['metricas'])
+
+
+class ExportarCsvTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        outra = Organizacao.objects.create(nome='Outra Biblioteca', slug='outra')
+        livro = Livro.objects.create(organizacao=outra, titulo='De Fora', isbn='9780000000099', ano_publicacao=2000)
+        self.criar(Exemplar.objects.create(organizacao=outra, livro=livro, codigo='FORA-1'),
+                   Membro.objects.create(organizacao=outra, nome='Zeca', cpf='999.999.999-99', email='z@x.com'), 1)
+
+    def criar(self, exemplar, membro, dias_atras):
+        data = self.hoje - timedelta(days=dias_atras)
+        return Emprestimo.objects.create(
+            organizacao=exemplar.organizacao, exemplar=exemplar, membro=membro, data_emprestimo=data,
+            data_devolucao=data, multa=Decimal('4.50'),
+        )
+
+    def linhas(self, **filtro):
+        resposta = self.client.get(reverse('exportar_csv'), filtro)
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn('attachment; filename="emprestimos_', resposta['Content-Disposition'])
+        return list(csv.reader(StringIO(resposta.content.decode('utf-8-sig')), delimiter=';'))
+
+    def test_exporta_so_a_organizacao_do_usuario(self):
+        self.criar(self.exemplar, self.ana, 2)
+        cabecalho, *linhas = self.linhas()
+        self.assertEqual(cabecalho[:3], ['Livro', 'Exemplar', 'Membro'])
+        self.assertEqual([linha[:3] for linha in linhas], [['Dom Casmurro', 'DC-001', 'Ana']])
+        self.assertEqual(linhas[0][6:], ['4,50', 'não'])
+
+    def test_marca_de_codificacao_aparece_so_no_comeco(self):
+        self.criar(self.exemplar, self.ana, 2)
+        conteudo = self.client.get(reverse('exportar_csv')).content
+        self.assertTrue(conteudo.startswith(b'\xef\xbb\xbf'))
+        self.assertEqual(conteudo.count(b'\xef\xbb\xbf'), 1)
+
+    def test_respeita_o_periodo(self):
+        self.criar(self.exemplar, self.ana, 2)
+        self.criar(self.exemplar, self.bruno, 40)
+        dia = (self.hoje - timedelta(days=40)).isoformat()
+        self.assertEqual([linha[2] for linha in self.linhas(de=dia, ate=dia)[1:]], ['Bruno'])
+
+    def test_sem_dados_traz_so_o_cabecalho_e_data_invalida_nao_quebra(self):
+        self.assertEqual(len(self.linhas()), 1)
+        self.assertEqual(len(self.linhas(de='abc', ate='xyz')), 1)
+
+    def test_texto_com_cara_de_formula_e_neutralizado(self):
+        for inicio in ['=', '+', '-', '@']:
+            with self.subTest(inicio=inicio):
+                self.assertEqual(relatorios.celula_segura(f'{inicio}1+1'), f"'{inicio}1+1")
+        self.ana.nome = '=HYPERLINK("http://exemplo.com")'
+        self.ana.save()
+        self.criar(self.exemplar, self.ana, 2)
+        self.assertEqual(self.linhas()[1][2], '\'=HYPERLINK("http://exemplo.com")')
+
+    def test_operador_nao_exporta_nem_ve_o_botao(self):
+        Perfil.objects.filter(usuario=self.usuario).update(papel=Perfil.OPERADOR)
+        self.assertEqual(self.client.get(reverse('exportar_csv')).status_code, 403)
+        self.assertNotContains(self.client.get(reverse('dashboard')), 'Exportar CSV')
+
+    def test_administrador_ve_o_botao_e_visitante_vai_para_o_login(self):
+        self.assertContains(self.client.get(reverse('dashboard')), 'Exportar CSV')
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse('exportar_csv')).status_code, 302)

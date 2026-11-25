@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
-from . import metricas, regras
+from . import metricas, regras, relatorios
 from .forms import (
     AutorForm, DevolucaoForm, EmprestimoForm, ExemplarForm, LivroForm, MembroForm, PeriodoForm, ReservaForm,
 )
@@ -67,7 +67,18 @@ def dashboard(request):
         'periodo': periodo,
         'metricas': dados,
         'mostra_series': mostra_series,
+        'pode_exportar': eh_admin(request.user),
     })
+
+
+@somente_admin
+def exportar_csv(request):
+    _, periodo = _periodo(request)
+    emprestimos = metricas.emprestimos_do_periodo(
+        org_atual(request), periodo['de'], periodo['ate'],
+    ).select_related('exemplar__livro', 'membro').order_by('data_emprestimo', 'pk')
+    nome = f"emprestimos_{periodo['de']:%Y-%m-%d}_a_{periodo['ate']:%Y-%m-%d}.csv"
+    return relatorios.emprestimos_csv(emprestimos, nome)
 
 
 # ---------------------------------------------------------------------------
