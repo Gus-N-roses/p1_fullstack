@@ -40,11 +40,7 @@ def inicio(request):
     atrasados = emprestimos_abertos.filter(data_prevista_devolucao__lt=hoje).select_related(
         'membro', 'exemplar__livro',
     )
-    form_periodo, periodo = _periodo(request)
     contexto = {
-        'form_periodo': form_periodo,
-        'periodo': periodo,
-        'metricas': metricas.do_periodo(org, periodo['de'], periodo['ate']),
         'total_livros': Livro.objects.filter(organizacao=org).count(),
         'total_exemplares': Exemplar.objects.filter(organizacao=org, ativo=True).count(),
         'total_membros': Membro.objects.filter(organizacao=org, ativo=True).count(),
@@ -55,6 +51,15 @@ def inicio(request):
         ).select_related('membro', 'livro'),
     }
     return render(request, 'acervo/inicio.html', contexto)
+
+
+def dashboard(request):
+    form_periodo, periodo = _periodo(request)
+    return render(request, 'acervo/dashboard.html', {
+        'form_periodo': form_periodo,
+        'periodo': periodo,
+        'metricas': metricas.do_periodo(org_atual(request), periodo['de'], periodo['ate']),
+    })
 
 
 # ---------------------------------------------------------------------------

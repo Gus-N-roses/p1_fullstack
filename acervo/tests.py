@@ -160,7 +160,7 @@ class TelasTeste(BaseTeste):
         regras.realizar_emprestimo(self.ana, self.exemplar)
         regras.criar_reserva(self.bruno, self.livro)
         rotas = [
-            reverse('inicio'), reverse('lista_livros'), reverse('livro_detalhe', args=[self.livro.pk]),
+            reverse('inicio'), reverse('dashboard'), reverse('lista_livros'), reverse('livro_detalhe', args=[self.livro.pk]),
             reverse('lista_autores'), reverse('lista_exemplares'), reverse('lista_membros'),
             reverse('membro_detalhe', args=[self.ana.pk]), reverse('lista_emprestimos'),
             reverse('lista_emprestimos') + '?filtro=todos', reverse('lista_reservas'),
@@ -627,7 +627,7 @@ class PainelTeste(BaseTeste):
         )
 
     def painel(self, **filtro):
-        resposta = self.client.get(reverse('inicio'), filtro)
+        resposta = self.client.get(reverse('dashboard'), filtro)
         self.assertEqual(resposta.status_code, 200)
         return resposta
 
@@ -672,6 +672,31 @@ class PainelTeste(BaseTeste):
         self.assertEqual(resposta.context['metricas']['emprestimos'], 0)
         self.assertEqual(resposta.context['metricas']['multas_geradas'], Decimal('0.00'))
         self.assertNotContains(resposta, 'Zeca')
+
+    def test_abertos_e_leitores_ativos(self):
+        self.emprestimo(self.ana, self.exemplar, 5)
+        self.emprestimo(self.ana, self.exemplar, 4)
+        Emprestimo.objects.create(organizacao=self.org, membro=self.bruno, exemplar=self.outro_exemplar)
+        dados = self.painel().context['metricas']
+        self.assertEqual((dados['emprestimos'], dados['abertos'], dados['leitores']), (3, 1, 2))
+
+    def test_serie_mensal_em_ordem_cronologica(self):
+        # meio do mês, para a data não mudar de mês conforme o dia em que o teste roda
+        este_mes = self.hoje.replace(day=1)
+        mes_passado = (este_mes - timedelta(days=1)).replace(day=1)
+        for data in [este_mes, mes_passado, mes_passado]:
+            Emprestimo.objects.create(organizacao=self.org, membro=self.ana, exemplar=self.exemplar,
+                                      data_emprestimo=data, data_devolucao=data)
+        dados = self.painel(de=mes_passado.isoformat(), ate=self.hoje.isoformat()).context['metricas']
+        self.assertEqual([(i['mes'], i['total']) for i in dados['por_mes']], [(mes_passado, 2), (este_mes, 1)])
+
+    def test_distribuicao_de_reservas_por_status(self):
+        for membro, status in [(self.ana, Reserva.AGUARDANDO), (self.bruno, Reserva.AGUARDANDO),
+                               (self.carla, Reserva.CANCELADA)]:
+            Reserva.objects.create(organizacao=self.org, livro=self.livro, membro=membro, status=status)
+        dados = self.painel().context['metricas']
+        self.assertEqual([(i['status'], i['total']) for i in dados['reservas_por_status']],
+                         [('Aguardando na fila', 2), ('Cancelada', 1)])
 
 
 class UnicidadePorOrganizacaoTeste(BaseTeste):
