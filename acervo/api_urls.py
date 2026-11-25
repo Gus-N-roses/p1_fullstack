@@ -3,6 +3,8 @@ from django.urls import path
 from . import api_views as api
 
 urlpatterns = [
+    path('dashboard/', api.DashboardApi.as_view(), name='api_dashboard'),
+
     path('autores/', api.AutorListCreate.as_view(), name='api_autores'),
     path('autores/<int:pk>/', api.AutorDetail.as_view(), name='api_autor'),
 

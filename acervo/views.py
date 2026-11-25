@@ -1,5 +1,3 @@
-from datetime import date
-
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, ProtectedError, Q
@@ -25,10 +23,7 @@ def org_atual(request):
 
 def _periodo(request):
     """O período escolhido no dashboard; sem escolha (ou inválida), os últimos 6 meses."""
-    hoje = timezone.localdate()
-    # Do dia 1º de cinco meses atrás até hoje: seis meses no gráfico, contando o atual
-    ano, mes = divmod(hoje.year * 12 + hoje.month - 1 - 5, 12)
-    padrao = {'de': date(ano, mes + 1, 1), 'ate': hoje}
+    padrao = metricas.periodo_padrao()
     if 'de' not in request.GET and 'ate' not in request.GET:
         return PeriodoForm(initial=padrao), padrao
     form = PeriodoForm(request.GET)

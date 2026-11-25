@@ -1022,3 +1022,51 @@ class ExportarCsvTeste(BaseTeste):
         self.assertContains(self.client.get(reverse('dashboard')), 'Exportar CSV')
         self.client.logout()
         self.assertEqual(self.client.get(reverse('exportar_csv')).status_code, 302)
+
+
+class ApiDashboardTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        outra = Organizacao.objects.create(nome='Outra Biblioteca', slug='outra')
+        livro = Livro.objects.create(organizacao=outra, titulo='De Fora', isbn='9780000000099', ano_publicacao=2000)
+        Emprestimo.objects.create(
+            organizacao=outra, exemplar=Exemplar.objects.create(organizacao=outra, livro=livro, codigo='FORA-1'),
+            membro=Membro.objects.create(organizacao=outra, nome='Zeca', cpf='999.999.999-99', email='z@x.com'),
+        )
+        regras.realizar_emprestimo(self.ana, self.exemplar)
+        self.url = reverse('api_dashboard')
+
+    def test_traz_so_os_numeros_da_organizacao(self):
+        dados = self.client.get(self.url).json()
+        self.assertEqual((dados['emprestimos'], dados['abertos'], dados['leitores']), (1, 1, 1))
+        self.assertEqual(dados['multas_geradas'], '0.00')
+        self.assertEqual(dados['livros'], [{'id': self.livro.pk, 'titulo': 'Dom Casmurro', 'total': 1}])
+        self.assertEqual(dados['membros'], [{'id': self.ana.pk, 'nome': 'Ana', 'total': 1}])
+        self.assertEqual(dados['por_mes'][-1], {'mes': self.hoje.strftime('%m/%Y'), 'total': 1})
+        self.assertEqual(dados['periodo']['ate'], self.hoje.isoformat())
+
+    def test_filtra_por_periodo(self):
+        dados = self.client.get(self.url, {'de': '2020-01-01', 'ate': '2020-01-31'}).json()
+        self.assertEqual((dados['emprestimos'], dados['livros'], dados['por_mes']), (0, [], []))
+
+    def test_periodo_invalido_responde_400(self):
+        for filtro in [{'de': 'abc', 'ate': '2026-01-01'}, {'de': '2026-01-01'},
+                       {'de': '2026-02-01', 'ate': '2026-01-01'}]:
+            with self.subTest(filtro=filtro):
+                self.assertEqual(self.client.get(self.url, filtro).status_code, 400)
+
+    def test_operador_nao_recebe_a_serie(self):
+        Perfil.objects.filter(usuario=self.usuario).update(papel=Perfil.OPERADOR)
+        dados = self.client.get(self.url).json()
+        self.assertEqual(dados['emprestimos'], 1)
+        self.assertNotIn('por_mes', dados)
+
+    def test_exige_login_e_perfil_e_so_aceita_leitura(self):
+        self.assertEqual(self.client.post(self.url).status_code, 405)
+        self.client.force_login(User.objects.create_user('sem_perfil'))
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_browsable_api_renderiza(self):
+        self.assertEqual(self.client.get(self.url, HTTP_ACCEPT='text/html').status_code, 200)

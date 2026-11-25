@@ -153,6 +153,9 @@ as mesmas regras das telas:
 - `/api/emprestimos/<id>/pagar-multa/`
 - `/api/reservas/<id>/cancelar/`
 
+O dashboard também sai em JSON, em `/api/dashboard/` (GET), com período opcional
+(`?de=AAAA-MM-DD&ate=AAAA-MM-DD`, as duas datas). A série `por_mes` só vem para o administrador.
+
 Exige login (sessão ou autenticação básica) e só enxerga os dados da organização do usuário.
 No navegador, entre pelo próprio sistema ou por `/api-auth/login/`. No terminal:
 

@@ -2,14 +2,23 @@
 
 Cada função responde a uma das perguntas listadas no README.
 """
+from datetime import date
 from decimal import Decimal
 
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncMonth
+from django.utils import timezone
 
 from .models import Emprestimo, Reserva
 
 TAMANHO_RANKING = 5
+
+
+def periodo_padrao():
+    """Do dia 1º de cinco meses atrás até hoje: seis meses no gráfico, contando o atual."""
+    hoje = timezone.localdate()
+    ano, mes = divmod(hoje.year * 12 + hoje.month - 1 - 5, 12)
+    return {'de': date(ano, mes + 1, 1), 'ate': hoje}
 
 
 def kpis(feitos, devolvidos):

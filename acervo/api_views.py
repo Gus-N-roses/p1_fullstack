@@ -4,10 +4,12 @@ from django.db.models import ProtectedError
 from rest_framework import generics, serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from . import regras
+from . import metricas, regras
+from .forms import PeriodoForm
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
-from .permissoes import AdminOuSomenteLeitura
+from .permissoes import AdminOuSomenteLeitura, eh_admin
 from .serializers import (
     AutorSerializer, DevolucaoSerializer, EmprestimoSerializer, ExemplarSerializer, LivroSerializer,
     MembroSerializer, ReservaSerializer,
@@ -169,3 +171,43 @@ class CancelarReserva(AcaoView):
 
     def executar(self, reserva, dados):
         return regras.cancelar_reserva(reserva)
+
+
+# Dashboard
+
+class DashboardApi(APIView):
+    """As mesmas métricas da tela. Período opcional: ?de=AAAA-MM-DD&ate=AAAA-MM-DD."""
+
+    def get(self, request):
+        organizacao = org_atual(request)
+        periodo = metricas.periodo_padrao()
+        if 'de' in request.query_params or 'ate' in request.query_params:
+            form = PeriodoForm(request.query_params)
+            # Na API, data inválida é erro de quem chamou: nada de trocar o período em silêncio
+            if not form.is_valid():
+                raise serializers.ValidationError(form.errors)
+            periodo = form.cleaned_data
+
+        dados = metricas.do_periodo(organizacao, periodo['de'], periodo['ate'])
+        resposta = {
+            'periodo': periodo,
+            'emprestimos': dados['emprestimos'],
+            'abertos': dados['abertos'],
+            'leitores': dados['leitores'],
+            'devolucoes': dados['devolucoes'],
+            'multas_geradas': str(dados['multas_geradas']),
+            'multas_pendentes': str(dados['multas_pendentes']),
+            'livros': [
+                {'id': item['exemplar__livro'], 'titulo': item['exemplar__livro__titulo'], 'total': item['total']}
+                for item in dados['livros']
+            ],
+            'membros': [
+                {'id': item['membro'], 'nome': item['membro__nome'], 'total': item['total']}
+                for item in dados['membros']
+            ],
+            'reservas_por_status': dados['reservas_por_status'],
+        }
+        # Mesma regra da tela: o operador não recebe a série
+        if eh_admin(request.user):
+            resposta['por_mes'] = dados['grafico_mensal']
+        return Response(resposta)
