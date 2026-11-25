@@ -1,9 +1,12 @@
 from datetime import timedelta
 from decimal import Decimal
+from importlib import import_module
 from io import StringIO
 
+from django.apps import apps
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
 from django.test import TestCase, override_settings
@@ -817,3 +820,62 @@ class OrganizacaoCriadaEmTeste(TestCase):
         organizacao = Organizacao.objects.create(nome='Nova', slug='nova')
         self.assertTrue(antes <= organizacao.criada_em <= timezone.now())
         self.assertFalse(Organizacao.objects.filter(criada_em__isnull=True).exists())
+
+
+class SenhasPrevisiveisTeste(TestCase):
+    def migrar(self):
+        import_module('acervo.migrations.0012_remove_senhas_previsiveis').neutralizar_senhas_previsiveis(apps, None)
+
+    def test_usuarios_de_demonstracao_nascem_sem_senha_e_sem_privilegios(self):
+        for nome in ('admin_central', 'admin_norte'):
+            usuario = User.objects.get(username=nome)
+            self.assertFalse(usuario.has_usable_password())
+            self.assertFalse(usuario.is_superuser or usuario.is_staff)
+            self.assertTrue(usuario.perfil.eh_admin)
+
+    def test_bloqueia_quem_ainda_usa_a_senha_antiga(self):
+        User.objects.filter(username='admin_central').update(
+            password=make_password('admin_central'), is_superuser=True, is_staff=True,
+        )
+        self.migrar()
+        usuario = User.objects.get(username='admin_central')
+        self.assertFalse(usuario.has_usable_password())
+        self.assertFalse(usuario.is_superuser or usuario.is_staff)
+
+    def test_nao_mexe_em_quem_ja_trocou_a_senha(self):
+        User.objects.filter(username='admin_norte').update(
+            password=make_password('outra-senha-de-teste'), is_superuser=True,
+        )
+        self.migrar()
+        usuario = User.objects.get(username='admin_norte')
+        self.assertTrue(usuario.check_password('outra-senha-de-teste'))
+        self.assertTrue(usuario.is_superuser)
+
+
+class PrepararDemoTeste(TestCase):
+    def preparar(self, **opcoes):
+        saida = StringIO()
+        call_command('preparar_demo', stdout=saida, **opcoes)
+        return saida.getvalue()
+
+    def test_quem_avalia_consegue_entrar_com_a_senha_mostrada(self):
+        senha = self.preparar().split('Senha: ')[1].strip()
+        for nome, papel in [('admin_central', Perfil.ADMIN), ('operador_central', Perfil.OPERADOR),
+                            ('admin_norte', Perfil.ADMIN), ('operador_norte', Perfil.OPERADOR)]:
+            with self.subTest(nome=nome):
+                resposta = self.client.post(reverse('login'), {'username': nome, 'password': senha})
+                self.assertRedirects(resposta, reverse('inicio'))
+                self.assertContains(self.client.get(reverse('lista_livros')), 'Dom Casmurro')
+                self.assertEqual(User.objects.get(username=nome).perfil.papel, papel)
+                self.client.logout()
+
+    def test_aceita_senha_escolhida_e_pode_rodar_de_novo(self):
+        self.preparar()
+        livros = Livro.objects.count()
+        self.preparar(senha='frase-longa-de-teste-42')
+        self.assertEqual(Livro.objects.count(), livros)
+        self.assertTrue(self.client.login(username='admin_norte', password='frase-longa-de-teste-42'))
+
+    def test_recusa_senha_fraca(self):
+        with self.assertRaisesMessage(CommandError, 'Senha fraca'):
+            self.preparar(senha='123')

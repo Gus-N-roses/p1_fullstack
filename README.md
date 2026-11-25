@@ -34,6 +34,29 @@ Estão todas em [`acervo/regras.py`](acervo/regras.py) e os valores ficam no `.e
   - se o prazo de retirada vencer, a reserva expira e o próximo da fila é chamado;
   - cancelar uma reserva separada também passa a vez para o próximo.
 
+## Para avaliar o projeto
+
+Depois de instalar (passos 1 a 3 de "Como rodar"):
+
+```bash
+python manage.py migrate
+python manage.py preparar_demo     # mostra a senha no terminal
+python manage.py runserver
+```
+
+O `preparar_demo` cria dados nas duas bibliotecas (se ainda não tiverem livros) e estas contas,
+todas com a senha exibida. Nenhuma senha fica gravada no repositório; para escolher a sua, use
+`--senha`. Rodar de novo troca a senha dessas contas.
+
+| Usuário | Papel | Organização |
+|---|---|---|
+| `admin_central` | administrador | Biblioteca Central |
+| `operador_central` | operador | Biblioteca Central |
+| `admin_norte` | administrador | Biblioteca Norte |
+| `operador_norte` | operador | Biblioteca Norte |
+
+Para o Django Admin (`/admin`), crie um superusuário com `python manage.py createsuperuser`.
+
 ## Como rodar
 
 ```bash

@@ -21,11 +21,8 @@ def criar_organizacoes_e_usuarios(apps, schema_editor):
     ]:
         usuario, criado = User.objects.get_or_create(
             username=username,
-            defaults={
-                'is_staff': True,
-                'is_superuser': True,
-                'password': make_password(username),
-            },
+            # Sem senha no código: defina com `python manage.py changepassword <usuário>`
+            defaults={'password': make_password(None)},
         )
         Perfil.objects.get_or_create(usuario=usuario, defaults={'organizacao': organizacao})
 
