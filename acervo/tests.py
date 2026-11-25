@@ -19,7 +19,7 @@ class BaseTeste(TestCase):
         self.hoje = timezone.localdate()
         self.org = Organizacao.objects.create(nome='Biblioteca de Teste', slug='teste')
         self.usuario = User.objects.create_user('atendente')
-        Perfil.objects.create(usuario=self.usuario, organizacao=self.org)
+        Perfil.objects.create(usuario=self.usuario, organizacao=self.org, papel=Perfil.ADMIN)
         self.client.force_login(self.usuario)
         autor = Autor.objects.create(organizacao=self.org, nome='Machado de Assis')
         self.livro = Livro.objects.create(organizacao=self.org, titulo='Dom Casmurro', isbn='9788535910663', ano_publicacao=1899)
@@ -416,3 +416,58 @@ class ApiLivrosTeste(BaseTeste):
         self.assertNotContains(resposta, 'Autor de Fora')
         self.client.logout()
         self.assertEqual(self.client.get(reverse('rest_framework:login')).status_code, 200)
+
+
+class PapeisTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        self.autor = Autor.objects.get()
+        self.rotas_do_catalogo = [reverse('novo_autor'), reverse('novo_livro'), reverse('novo_exemplar')] + [
+            reverse(f'{acao}_{nome}', args=[objeto.pk])
+            for nome, objeto in [('autor', self.autor), ('livro', self.livro), ('exemplar', self.exemplar)]
+            for acao in ('editar', 'excluir')
+        ]
+
+    def virar_operador(self):
+        Perfil.objects.filter(usuario=self.usuario).update(papel=Perfil.OPERADOR)
+
+    def test_operador_nao_altera_o_catalogo_pelas_telas(self):
+        self.virar_operador()
+        for rota in self.rotas_do_catalogo:
+            with self.subTest(rota=rota):
+                self.assertEqual(self.client.get(rota).status_code, 403)
+                self.assertEqual(self.client.post(rota).status_code, 403)
+        self.assertTrue(Livro.objects.filter(pk=self.livro.pk).exists())
+
+    def test_botoes_do_catalogo_so_aparecem_para_o_administrador(self):
+        paginas = [reverse('lista_autores'), reverse('lista_livros'), reverse('lista_exemplares'),
+                   reverse('livro_detalhe', args=[self.livro.pk])]
+        for papel, aparece in [(Perfil.ADMIN, True), (Perfil.OPERADOR, False)]:
+            Perfil.objects.filter(usuario=self.usuario).update(papel=papel)
+            for pagina in paginas:
+                with self.subTest(papel=papel, pagina=pagina):
+                    resposta = self.client.get(pagina)
+                    self.assertEqual(resposta.status_code, 200)
+                    verificar = self.assertContains if aparece else self.assertNotContains
+                    verificar(resposta, '/novo/' if pagina != reverse('livro_detalhe', args=[self.livro.pk])
+                              else reverse('novo_exemplar'))
+                    verificar(resposta, '/editar/')
+
+    def test_operador_continua_atendendo_o_balcao(self):
+        self.virar_operador()
+        for rota in [reverse('novo_membro'), reverse('novo_emprestimo'), reverse('nova_reserva')]:
+            with self.subTest(rota=rota):
+                self.assertEqual(self.client.get(rota).status_code, 200)
+
+    def test_operador_so_le_na_api(self):
+        self.virar_operador()
+        lista, detalhe = reverse('api_livros'), reverse('api_livro', args=[self.livro.pk])
+        self.assertEqual(self.client.get(lista).status_code, 200)
+        self.assertEqual(self.client.get(detalhe).status_code, 200)
+        self.assertEqual(self.client.post(lista, {}).status_code, 403)
+        self.assertEqual(self.client.patch(detalhe, {}, content_type='application/json').status_code, 403)
+        self.assertEqual(self.client.delete(detalhe).status_code, 403)
+
+    def test_perfil_novo_nasce_operador(self):
+        perfil = Perfil.objects.create(usuario=User.objects.create_user('novato'), organizacao=self.org)
+        self.assertFalse(perfil.eh_admin)

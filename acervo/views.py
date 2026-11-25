@@ -10,6 +10,7 @@ from .forms import (
     AutorForm, DevolucaoForm, EmprestimoForm, ExemplarForm, LivroForm, MembroForm, ReservaForm,
 )
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
+from .permissoes import somente_admin
 
 
 def org_atual(request):
@@ -81,17 +82,20 @@ def lista_autores(request):
     return render(request, 'acervo/autores/lista.html', {'autores': autores})
 
 
+@somente_admin
 def novo_autor(request):
     return _formulario(request, AutorForm, 'Novo autor', 'lista_autores', org_atual(request),
                        mensagem='Autor cadastrado.')
 
 
+@somente_admin
 def editar_autor(request, pk):
     autor = get_object_or_404(Autor, pk=pk, organizacao=org_atual(request))
     return _formulario(request, AutorForm, f'Editar {autor}', 'lista_autores', org_atual(request),
                        autor, 'Autor atualizado.')
 
 
+@somente_admin
 def excluir_autor(request, pk):
     autor = get_object_or_404(Autor, pk=pk, organizacao=org_atual(request))
     return _excluir(request, autor, 'lista_autores', 'lista_autores')
@@ -149,17 +153,20 @@ def livro_detalhe(request, pk):
     return render(request, 'acervo/livros/detalhe.html', contexto)
 
 
+@somente_admin
 def novo_livro(request):
     return _formulario(request, LivroForm, 'Novo livro', lambda livro: livro.get_absolute_url(),
                        org_atual(request), mensagem='Livro cadastrado. Agora cadastre os exemplares.')
 
 
+@somente_admin
 def editar_livro(request, pk):
     livro = get_object_or_404(Livro, pk=pk, organizacao=org_atual(request))
     return _formulario(request, LivroForm, f'Editar {livro}', lambda l: l.get_absolute_url(),
                        org_atual(request), livro, 'Livro atualizado.')
 
 
+@somente_admin
 def excluir_livro(request, pk):
     livro = get_object_or_404(Livro, pk=pk, organizacao=org_atual(request))
     return _excluir(request, livro, 'lista_livros', livro.get_absolute_url())
@@ -176,6 +183,7 @@ def lista_exemplares(request):
     return render(request, 'acervo/exemplares/lista.html', {'exemplares': exemplares})
 
 
+@somente_admin
 def novo_exemplar(request):
     # Vindo da página do livro (?livro=ID), o livro já aparece selecionado
     return _formulario(request, ExemplarForm, 'Novo exemplar', lambda e: e.livro.get_absolute_url(),
@@ -183,12 +191,14 @@ def novo_exemplar(request):
                        inicial={'livro': request.GET.get('livro')})
 
 
+@somente_admin
 def editar_exemplar(request, pk):
     exemplar = get_object_or_404(Exemplar, pk=pk, organizacao=org_atual(request))
     return _formulario(request, ExemplarForm, f'Editar exemplar {exemplar.codigo}',
                        lambda e: e.livro.get_absolute_url(), org_atual(request), exemplar, 'Exemplar atualizado.')
 
 
+@somente_admin
 def excluir_exemplar(request, pk):
     exemplar = get_object_or_404(Exemplar, pk=pk, organizacao=org_atual(request))
     return _excluir(request, exemplar, exemplar.livro.get_absolute_url(), 'lista_exemplares')

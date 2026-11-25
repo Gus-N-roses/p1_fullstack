@@ -5,7 +5,9 @@
 {% block conteudo %}
 <div class="cabecalho-pagina">
   <h1>Autores</h1>
-  <a class="botao" href="{% url 'novo_autor' %}">+ Novo autor</a>
+  {% if user.perfil.eh_admin %}
+    <a class="botao" href="{% url 'novo_autor' %}">+ Novo autor</a>
+  {% endif %}
 </div>
 
 <table>
@@ -18,8 +20,10 @@
         <td>{{ autor.data_nascimento|date:"d/m/Y"|default:"—" }}</td>
         <td>{{ autor.quantidade_livros }}</td>
         <td class="acoes">
-          <a href="{% url 'editar_autor' autor.pk %}">Editar</a>
-          <a href="{% url 'excluir_autor' autor.pk %}">Excluir</a>
+          {% if user.perfil.eh_admin %}
+            <a href="{% url 'editar_autor' autor.pk %}">Editar</a>
+            <a href="{% url 'excluir_autor' autor.pk %}">Excluir</a>
+          {% endif %}
         </td>
       </tr>
     {% empty %}

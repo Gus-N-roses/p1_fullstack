@@ -20,15 +20,25 @@ class Organizacao(models.Model):
 
 
 class Perfil(models.Model):
-    """Vincula um usuário do Django a uma organização."""
+    """Vincula um usuário do Django a uma organização e define o papel dele nela."""
+    ADMIN = 'admin'
+    OPERADOR = 'operador'
+    PAPEIS = [(ADMIN, 'Administrador'), (OPERADOR, 'Operador')]
+
     usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='perfil')
     organizacao = models.ForeignKey(Organizacao, on_delete=models.CASCADE, related_name='perfis')
+    # Padrão com o menor acesso: virar administrador é uma escolha explícita
+    papel = models.CharField(max_length=20, choices=PAPEIS, default=OPERADOR)
 
     class Meta:
         verbose_name_plural = 'perfis'
 
     def __str__(self):
         return f'{self.usuario} ({self.organizacao})'
+
+    @property
+    def eh_admin(self):
+        return self.papel == self.ADMIN
 
 
 class OrganizacaoBase(models.Model):

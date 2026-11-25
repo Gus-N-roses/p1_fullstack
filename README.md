@@ -64,6 +64,16 @@ organização, definido no Admin, na edição do usuário.
 
 Acesse http://127.0.0.1:8000 (sistema) e http://127.0.0.1:8000/admin (Django Admin).
 
+## Papéis
+
+| Ação | Administrador | Operador |
+|---|---|---|
+| Empréstimos, devoluções, multas, reservas e membros | sim | sim |
+| Consultar autores, livros e exemplares | sim | sim |
+| Cadastrar, editar e excluir autores, livros e exemplares | sim | não |
+
+O papel é definido no **Perfil** do usuário (padrão: operador) e vale nas telas e na API.
+
 ## API (Django REST Framework)
 
 | Verbo | Endereço | Ação |

@@ -5,7 +5,9 @@
 {% block conteudo %}
 <div class="cabecalho-pagina">
   <h1>Exemplares</h1>
-  <a class="botao" href="{% url 'novo_exemplar' %}">+ Novo exemplar</a>
+  {% if user.perfil.eh_admin %}
+    <a class="botao" href="{% url 'novo_exemplar' %}">+ Novo exemplar</a>
+  {% endif %}
 </div>
 
 <table>
@@ -18,8 +20,10 @@
         <td>{{ exemplar.data_aquisicao|date:"d/m/Y" }}</td>
         <td><span class="etiqueta {{ exemplar.situacao }}">{{ exemplar.situacao }}</span></td>
         <td class="acoes">
-          <a href="{% url 'editar_exemplar' exemplar.pk %}">Editar</a>
-          <a href="{% url 'excluir_exemplar' exemplar.pk %}">Excluir</a>
+          {% if user.perfil.eh_admin %}
+            <a href="{% url 'editar_exemplar' exemplar.pk %}">Editar</a>
+            <a href="{% url 'excluir_exemplar' exemplar.pk %}">Excluir</a>
+          {% endif %}
         </td>
       </tr>
     {% empty %}

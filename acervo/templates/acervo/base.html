@@ -19,7 +19,7 @@
       <a href="{% url 'lista_membros' %}">Membros</a>
       <a href="{% url 'lista_emprestimos' %}">Empréstimos</a>
       <a href="{% url 'lista_reservas' %}">Reservas</a>
-      <a href="{% url 'admin:index' %}">Admin</a>
+      {% if user.is_staff %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
       <form method="post" action="{% url 'logout' %}">
         {% csrf_token %}
         <button type="submit" class="link">Sair ({{ user.username }})</button>

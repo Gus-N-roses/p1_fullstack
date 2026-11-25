@@ -23,6 +23,12 @@ admin.site.unregister(User)
 admin.site.register(User, CustomUserAdmin)
 
 
+@admin.register(Perfil)
+class PerfilAdmin(admin.ModelAdmin):
+    list_display = ['usuario', 'organizacao', 'papel']
+    list_filter = ['organizacao', 'papel']
+
+
 @admin.register(Organizacao)
 class OrganizacaoAdmin(admin.ModelAdmin):
     list_display = ['nome', 'slug']

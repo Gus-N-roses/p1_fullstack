@@ -6,8 +6,10 @@
 <div class="cabecalho-pagina">
   <h1>{{ livro.titulo }}</h1>
   <div>
-    <a class="botao secundario" href="{% url 'editar_livro' livro.pk %}">Editar</a>
-    <a class="botao secundario" href="{% url 'excluir_livro' livro.pk %}">Excluir</a>
+    {% if user.perfil.eh_admin %}
+      <a class="botao secundario" href="{% url 'editar_livro' livro.pk %}">Editar</a>
+      <a class="botao secundario" href="{% url 'excluir_livro' livro.pk %}">Excluir</a>
+    {% endif %}
   </div>
 </div>
 
@@ -22,7 +24,9 @@
 
 <div class="cabecalho-pagina">
   <h2>Exemplares</h2>
-  <a class="botao" href="{% url 'novo_exemplar' %}?livro={{ livro.pk }}">+ Novo exemplar</a>
+  {% if user.perfil.eh_admin %}
+    <a class="botao" href="{% url 'novo_exemplar' %}?livro={{ livro.pk }}">+ Novo exemplar</a>
+  {% endif %}
 </div>
 <table>
   <thead><tr><th>Código</th><th>Aquisição</th><th>Situação</th><th></th></tr></thead>
@@ -34,8 +38,10 @@
         <td><span class="etiqueta {{ exemplar.situacao }}">{{ exemplar.situacao }}</span></td>
         <td class="acoes">
           {% if exemplar.esta_disponivel %}<a href="{% url 'novo_emprestimo' %}?exemplar={{ exemplar.pk }}">Emprestar</a>{% endif %}
-          <a href="{% url 'editar_exemplar' exemplar.pk %}">Editar</a>
-          <a href="{% url 'excluir_exemplar' exemplar.pk %}">Excluir</a>
+          {% if user.perfil.eh_admin %}
+            <a href="{% url 'editar_exemplar' exemplar.pk %}">Editar</a>
+            <a href="{% url 'excluir_exemplar' exemplar.pk %}">Excluir</a>
+          {% endif %}
         </td>
       </tr>
     {% empty %}

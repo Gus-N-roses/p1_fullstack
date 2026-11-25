@@ -1,7 +1,9 @@
 from django.db.models import ProtectedError
 from rest_framework import generics, serializers
+from rest_framework.permissions import IsAuthenticated
 
 from .models import Livro
+from .permissoes import AdminOuSomenteLeitura
 from .serializers import LivroSerializer
 from .views import org_atual
 
@@ -22,11 +24,13 @@ class DaOrganizacaoMixin:
 class LivroListCreate(DaOrganizacaoMixin, generics.ListCreateAPIView):
     queryset = Livro.objects.prefetch_related('autores')
     serializer_class = LivroSerializer
+    permission_classes = [IsAuthenticated, AdminOuSomenteLeitura]
 
 
 class LivroDetail(DaOrganizacaoMixin, generics.RetrieveUpdateDestroyAPIView):
     queryset = Livro.objects.prefetch_related('autores')
     serializer_class = LivroSerializer
+    permission_classes = [IsAuthenticated, AdminOuSomenteLeitura]
 
     def perform_destroy(self, instance):
         try:
