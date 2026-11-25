@@ -64,6 +64,16 @@ organização, definido no Admin, na edição do usuário.
 
 Acesse http://127.0.0.1:8000 (sistema) e http://127.0.0.1:8000/admin (Django Admin).
 
+## Painel
+
+A tela inicial mostra os totais atuais do acervo, os atrasos, as reservas para retirada e o
+movimento de um período (padrão: últimos 30 dias), calculado em
+[`acervo/metricas.py`](acervo/metricas.py):
+
+- empréstimos feitos e devoluções;
+- multas geradas nas devoluções do período e quanto delas segue sem pagamento;
+- os 5 livros mais emprestados e os 5 membros que mais pegaram livros.
+
 ## Papéis
 
 | Ação | Administrador | Operador |

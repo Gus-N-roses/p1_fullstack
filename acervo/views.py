@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, ProtectedError, Q
@@ -5,9 +7,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
-from . import regras
+from . import metricas, regras
 from .forms import (
-    AutorForm, DevolucaoForm, EmprestimoForm, ExemplarForm, LivroForm, MembroForm, ReservaForm,
+    AutorForm, DevolucaoForm, EmprestimoForm, ExemplarForm, LivroForm, MembroForm, PeriodoForm, ReservaForm,
 )
 from .models import Autor, Emprestimo, Exemplar, Livro, Membro, Reserva
 from .permissoes import somente_admin
@@ -21,6 +23,16 @@ def org_atual(request):
     return perfil.organizacao
 
 
+def _periodo(request):
+    """O período escolhido no painel; sem escolha (ou inválida), os últimos 30 dias."""
+    hoje = timezone.localdate()
+    padrao = {'de': hoje - timedelta(days=29), 'ate': hoje}
+    if 'de' not in request.GET and 'ate' not in request.GET:
+        return PeriodoForm(initial=padrao), padrao
+    form = PeriodoForm(request.GET)
+    return form, form.cleaned_data if form.is_valid() else padrao
+
+
 def inicio(request):
     org = org_atual(request)
     hoje = timezone.localdate()
@@ -28,7 +40,11 @@ def inicio(request):
     atrasados = emprestimos_abertos.filter(data_prevista_devolucao__lt=hoje).select_related(
         'membro', 'exemplar__livro',
     )
+    form_periodo, periodo = _periodo(request)
     contexto = {
+        'form_periodo': form_periodo,
+        'periodo': periodo,
+        'metricas': metricas.do_periodo(org, periodo['de'], periodo['ate']),
         'total_livros': Livro.objects.filter(organizacao=org).count(),
         'total_exemplares': Exemplar.objects.filter(organizacao=org, ativo=True).count(),
         'total_membros': Membro.objects.filter(organizacao=org, ativo=True).count(),

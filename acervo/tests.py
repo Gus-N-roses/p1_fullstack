@@ -604,3 +604,66 @@ class ApiRecursosTeste(BaseTeste):
                 resposta = self.client.get(url, HTTP_ACCEPT='text/html')
                 self.assertIn(resposta.status_code, (200, 405))  # ações só aceitam POST
                 self.assertNotContains(resposta, 'Zeca', status_code=resposta.status_code)
+
+
+class PainelTeste(BaseTeste):
+    def setUp(self):
+        super().setUp()
+        self.outro_livro = Livro.objects.create(
+            organizacao=self.org, titulo='1984', isbn='9788535914849', ano_publicacao=1949,
+        )
+        self.outro_exemplar = Exemplar.objects.create(organizacao=self.org, livro=self.outro_livro, codigo='84-1')
+
+    def emprestimo(self, membro, exemplar, dias_atras, multa='0.00', paga=True):
+        data = self.hoje - timedelta(days=dias_atras)
+        return Emprestimo.objects.create(
+            organizacao=exemplar.organizacao, membro=membro, exemplar=exemplar, data_emprestimo=data,
+            data_devolucao=data, multa=Decimal(multa), multa_paga=paga,
+        )
+
+    def painel(self, **filtro):
+        resposta = self.client.get(reverse('inicio'), filtro)
+        self.assertEqual(resposta.status_code, 200)
+        return resposta
+
+    def test_totais_multas_e_rankings(self):
+        self.emprestimo(self.ana, self.exemplar, 1, multa='4.00', paga=False)
+        self.emprestimo(self.ana, self.exemplar, 2, multa='6.00')
+        self.emprestimo(self.bruno, self.outro_exemplar, 3)
+        dados = self.painel().context['metricas']
+
+        self.assertEqual((dados['emprestimos'], dados['devolucoes']), (3, 3))
+        self.assertEqual((dados['multas_geradas'], dados['multas_pendentes']), (Decimal('10.00'), Decimal('4.00')))
+        self.assertEqual([(i['exemplar__livro__titulo'], i['total']) for i in dados['livros']],
+                         [('Dom Casmurro', 2), ('1984', 1)])
+        self.assertEqual([(i['membro__nome'], i['total']) for i in dados['membros']], [('Ana', 2), ('Bruno', 1)])
+
+    def test_filtro_por_periodo(self):
+        self.emprestimo(self.ana, self.exemplar, 1)
+        self.emprestimo(self.bruno, self.outro_exemplar, 60)
+        self.assertEqual(self.painel().context['metricas']['emprestimos'], 1)  # padrão: 30 dias
+
+        antigo = self.hoje - timedelta(days=60)
+        dados = self.painel(de=antigo.isoformat(), ate=antigo.isoformat()).context['metricas']
+        self.assertEqual([i['membro__nome'] for i in dados['membros']], ['Bruno'])
+
+    def test_periodo_invalido_avisa_e_usa_o_padrao(self):
+        self.emprestimo(self.ana, self.exemplar, 1)
+        for filtro, aviso in [({'de': '2026-02-01', 'ate': '2026-01-01'}, 'não pode ser depois'),
+                              ({'de': 'abc', 'ate': ''}, 'Informe as duas datas')]:
+            with self.subTest(filtro=filtro):
+                resposta = self.painel(**filtro)
+                self.assertContains(resposta, aviso)
+                self.assertEqual(resposta.context['metricas']['emprestimos'], 1)
+
+    def test_nao_conta_outra_organizacao(self):
+        outra = Organizacao.objects.create(nome='Outra Biblioteca', slug='outra')
+        livro = Livro.objects.create(organizacao=outra, titulo='De Fora', isbn='9780000000099', ano_publicacao=2000)
+        exemplar = Exemplar.objects.create(organizacao=outra, livro=livro, codigo='FORA-1')
+        membro = Membro.objects.create(organizacao=outra, nome='Zeca', cpf='999.999.999-99', email='z@exemplo.com')
+        self.emprestimo(membro, exemplar, 1, multa='50.00', paga=False)
+
+        resposta = self.painel()
+        self.assertEqual(resposta.context['metricas']['emprestimos'], 0)
+        self.assertEqual(resposta.context['metricas']['multas_geradas'], Decimal('0.00'))
+        self.assertNotContains(resposta, 'Zeca')

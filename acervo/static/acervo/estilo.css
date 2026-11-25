@@ -98,6 +98,8 @@ button.link { background: none; color: var(--vinho-claro); padding: 0; text-deco
 .busca { display: flex; gap: .5rem; margin: 1rem 0; flex-wrap: wrap; }
 .busca input, .busca select { padding: .5rem; border: 1px solid var(--borda); border-radius: 6px; font: inherit; }
 .busca input { flex: 1; min-width: 200px; }
+.busca.periodo { align-items: center; }
+.busca.periodo input { flex: 0; min-width: 0; }
 
 .mensagens { list-style: none; padding: 0; margin: 0 0 1rem; }
 .mensagem { padding: .75rem 1rem; border-radius: 6px; margin-bottom: .5rem; background: #e9e1d9; }

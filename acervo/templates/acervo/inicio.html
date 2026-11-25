@@ -15,6 +15,59 @@
   <div class="cartao"><span class="numero">{{ total_emprestimos_abertos }}</span> empréstimos em aberto</div>
 </section>
 
+<h2>Movimento de {{ periodo.de|date:"d/m/Y" }} a {{ periodo.ate|date:"d/m/Y" }}</h2>
+<form method="get" class="busca periodo">
+  {{ form_periodo.de.label_tag }} {{ form_periodo.de }}
+  {{ form_periodo.ate.label_tag }} {{ form_periodo.ate }}
+  <button type="submit">Filtrar</button>
+  <a class="botao secundario" href="{% url 'inicio' %}">Últimos 30 dias</a>
+</form>
+{% if form_periodo.errors %}
+  <p class="alerta">
+    {% for erro in form_periodo.non_field_errors %}{{ erro }} {% empty %}Informe as duas datas. {% endfor %}
+    Mostrando os últimos 30 dias.
+  </p>
+{% endif %}
+
+<section class="cartoes">
+  <div class="cartao"><span class="numero">{{ metricas.emprestimos }}</span> empréstimos feitos</div>
+  <div class="cartao"><span class="numero">{{ metricas.devolucoes }}</span> devoluções</div>
+  <div class="cartao"><span class="numero">R$ {{ metricas.multas_geradas }}</span> em multas geradas</div>
+  <div class="cartao"><span class="numero">R$ {{ metricas.multas_pendentes }}</span> dessas ainda não pagas</div>
+</section>
+
+<h2>Livros mais emprestados no período</h2>
+<table>
+  <thead><tr><th>#</th><th>Livro</th><th>Empréstimos</th></tr></thead>
+  <tbody>
+    {% for item in metricas.livros %}
+      <tr>
+        <td>{{ forloop.counter }}º</td>
+        <td><a href="{% url 'livro_detalhe' item.exemplar__livro %}">{{ item.exemplar__livro__titulo }}</a></td>
+        <td>{{ item.total }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3" class="vazio">Nenhum empréstimo no período.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Membros que mais pegaram livros no período</h2>
+<table>
+  <thead><tr><th>#</th><th>Membro</th><th>Empréstimos</th></tr></thead>
+  <tbody>
+    {% for item in metricas.membros %}
+      <tr>
+        <td>{{ forloop.counter }}º</td>
+        <td><a href="{% url 'membro_detalhe' item.membro %}">{{ item.membro__nome }}</a></td>
+        <td>{{ item.total }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3" class="vazio">Nenhum empréstimo no período.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
 <h2>Empréstimos em atraso</h2>
 <table>
   <thead><tr><th>Livro</th><th>Exemplar</th><th>Membro</th><th>Previsto</th><th>Atraso</th><th>Multa até hoje</th><th></th></tr></thead>

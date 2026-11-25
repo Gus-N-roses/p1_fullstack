@@ -97,6 +97,17 @@ class DevolucaoForm(forms.Form):
     data_devolucao = forms.DateField(label='Data da devolução', widget=DataInput())
 
 
+class PeriodoForm(forms.Form):
+    de = forms.DateField(label='De', widget=DataInput())
+    ate = forms.DateField(label='Até', widget=DataInput())
+
+    def clean(self):
+        dados = super().clean()
+        if dados.get('de') and dados.get('ate') and dados['de'] > dados['ate']:
+            raise forms.ValidationError('A data inicial não pode ser depois da final.')
+        return dados
+
+
 class ReservaForm(forms.ModelForm):
     class Meta:
         model = Reserva
