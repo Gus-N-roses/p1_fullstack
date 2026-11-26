@@ -909,8 +909,9 @@ class PrepararDemoTeste(TestCase):
         call_command('preparar_demo', stdout=saida, **opcoes)
         return saida.getvalue()
 
-    def test_quem_avalia_consegue_entrar_com_a_senha_mostrada(self):
-        senha = self.preparar().split('Senha: ')[1].strip()
+    def test_quem_avalia_consegue_entrar_com_a_senha_padrao(self):
+        self.preparar()
+        senha = 'biblioteca-demo-2026'
         for nome, papel in [('admin_central', Perfil.ADMIN), ('operador_central', Perfil.OPERADOR),
                             ('admin_norte', Perfil.ADMIN), ('operador_norte', Perfil.OPERADOR)]:
             with self.subTest(nome=nome):
@@ -1164,3 +1165,18 @@ class ConferenciaDoDashboardTeste(BaseTeste):
                 self.assertEqual(dados[chave], [])
         self.assertContains(resposta, 'Nenhum empréstimo no período.')
         self.assertContains(resposta, 'Nenhuma reserva no período.')
+
+
+class LoginComContasDeDemonstracaoTeste(TestCase):
+    @override_settings(DEBUG=True)
+    def test_localmente_mostra_usuarios_e_senha(self):
+        resposta = self.client.get(reverse('login'))
+        for texto in ['admin_central', 'operador_central', 'admin_norte', 'operador_norte', 'biblioteca-demo-2026']:
+            with self.subTest(texto=texto):
+                self.assertContains(resposta, texto)
+
+    @override_settings(DEBUG=False)
+    def test_publicado_nao_mostra(self):
+        resposta = self.client.get(reverse('login'))
+        self.assertNotContains(resposta, 'biblioteca-demo-2026')
+        self.assertNotContains(resposta, 'Contas de demonstração')

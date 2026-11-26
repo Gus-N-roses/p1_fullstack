@@ -5,10 +5,42 @@
 {% block conteudo %}
 <h1>Entrar</h1>
 
-<form method="post" class="formulario">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <input type="hidden" name="next" value="{{ next }}">
-  <button type="submit">Entrar</button>
-</form>
+<div class="login">
+  <form method="post" class="formulario">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit">Entrar</button>
+  </form>
+
+  {% if contas_demo %}
+    <section class="contas-demo">
+      <h2>Contas de demonstração</h2>
+      <p>Senha de todas: <code>{{ senha_demo }}</code>. Clique numa conta para preencher.</p>
+      <table>
+        <thead><tr><th>Usuário</th><th>Papel</th><th>Biblioteca</th></tr></thead>
+        <tbody>
+          {% for conta in contas_demo %}
+            <tr>
+              <td><button type="button" class="link preencher" data-usuario="{{ conta.usuario }}">{{ conta.usuario }}</button></td>
+              <td>{{ conta.papel }}</td>
+              <td>{{ conta.biblioteca }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {{ senha_demo|json_script:"senha-demo" }}
+      <script>
+        const senhaDemo = JSON.parse(document.getElementById('senha-demo').textContent);
+        const preencher = usuario => {
+          document.getElementById('id_username').value = usuario;
+          document.getElementById('id_password').value = senhaDemo;
+        };
+        document.querySelectorAll('.preencher').forEach(botao =>
+          botao.addEventListener('click', () => preencher(botao.dataset.usuario)));
+        if (!document.getElementById('id_username').value) preencher('{{ contas_demo.0.usuario }}');
+      </script>
+    </section>
+  {% endif %}
+</div>
 {% endblock %}

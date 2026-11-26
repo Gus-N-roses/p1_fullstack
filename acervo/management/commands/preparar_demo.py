@@ -1,5 +1,3 @@
-import secrets
-
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -8,6 +6,9 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from acervo.models import Organizacao, Perfil
+
+# Pública de propósito: só serve para avaliar o projeto rodando na própria máquina
+SENHA_DEMO = 'biblioteca-demo-2026'
 
 CONTAS = [
     ('admin_central', 'biblioteca-central', Perfil.ADMIN),
@@ -21,12 +22,11 @@ class Command(BaseCommand):
     help = 'Deixa o sistema pronto para avaliação: contas dos dois papéis e dados nas duas bibliotecas.'
 
     def add_arguments(self, parser):
-        parser.add_argument('--senha', help='Senha das contas de demonstração. Sem ela, uma é sorteada.')
+        parser.add_argument('--senha', default=SENHA_DEMO, help=f'Senha das contas (padrão: {SENHA_DEMO}).')
 
     @transaction.atomic
     def handle(self, *args, **opcoes):
-        # A senha nunca fica no repositório: é escolhida ou sorteada a cada execução
-        senha = opcoes.get('senha') or secrets.token_urlsafe(9)
+        senha = opcoes['senha']
         try:
             validate_password(senha)
         except ValidationError as erro:

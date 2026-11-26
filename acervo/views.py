@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth.views import LoginView
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Prefetch, ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -28,6 +30,23 @@ def _periodo(request):
         return PeriodoForm(initial=padrao), padrao
     form = PeriodoForm(request.GET)
     return form, form.cleaned_data if form.is_valid() else padrao
+
+
+class Entrar(LoginView):
+    """Login. Rodando localmente (DEBUG), mostra as contas de demonstração para quem avalia."""
+    template_name = 'acervo/login.html'
+
+    def get_context_data(self, **kwargs):
+        contexto = super().get_context_data(**kwargs)
+        if settings.DEBUG:
+            from .management.commands.preparar_demo import CONTAS, SENHA_DEMO
+            contexto['contas_demo'] = [
+                {'usuario': nome, 'papel': 'Administrador' if papel == 'admin' else 'Operador',
+                 'biblioteca': slug.replace('biblioteca-', '').capitalize()}
+                for nome, slug, papel in CONTAS
+            ]
+            contexto['senha_demo'] = SENHA_DEMO
+        return contexto
 
 
 def inicio(request):

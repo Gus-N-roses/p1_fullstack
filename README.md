@@ -44,20 +44,22 @@ Depois de instalar (passos 1 a 3 de "Como rodar"):
 
 ```bash
 python manage.py migrate
-python manage.py preparar_demo     # mostra a senha no terminal
+python manage.py preparar_demo
 python manage.py runserver
 ```
 
-O `preparar_demo` cria dados nas duas bibliotecas (se ainda não tiverem livros) e estas contas,
-todas com a senha exibida. Nenhuma senha fica gravada no repositório; para escolher a sua, use
-`--senha`. Rodar de novo troca a senha dessas contas.
+O `preparar_demo` cria dados nas duas bibliotecas (se ainda não tiverem livros) e estas contas.
+Rodando localmente, a tela de login também mostra as contas e preenche usuário e senha com um clique.
 
-| Usuário | Papel | Organização |
-|---|---|---|
-| `admin_central` | administrador | Biblioteca Central |
-| `operador_central` | operador | Biblioteca Central |
-| `admin_norte` | administrador | Biblioteca Norte |
-| `operador_norte` | operador | Biblioteca Norte |
+| Usuário | Senha | Papel | Organização |
+|---|---|---|---|
+| `admin_central` | `biblioteca-demo-2026` | administrador | Biblioteca Central |
+| `operador_central` | `biblioteca-demo-2026` | operador | Biblioteca Central |
+| `admin_norte` | `biblioteca-demo-2026` | administrador | Biblioteca Norte |
+| `operador_norte` | `biblioteca-demo-2026` | operador | Biblioteca Norte |
+
+Essa senha é pública e serve só para avaliação local. Se o sistema for publicado, troque com
+`python manage.py preparar_demo --senha <outra>` e use `DEBUG=False`, que esconde o quadro do login.
 
 Para o Django Admin (`/admin`), crie um superusuário com `python manage.py createsuperuser`.
 
